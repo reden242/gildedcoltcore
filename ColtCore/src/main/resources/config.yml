@@ -1,0 +1,1581 @@
+# Do not edit. ColtCore compares this against the version it ships with and
+# adds any missing keys on startup, backing your file up to config-backups/
+# first. Your existing values are never changed by that merge.
+#
+# One caveat: deleting a key does not disable it permanently - the next merge
+# will restore it at its default, because a deletion is indistinguishable from
+# a key that was never there. Set it to false or empty instead of deleting it.
+config-version: 42
+
+local-ai:
+  # Local-only supervised clean/advertising classifier. No external AI.
+  enabled: true
+  shadow-mode: false
+  labels:
+    - clean
+    - advertising
+  min-samples-per-label: 60
+  min-accuracy: 0.90
+  min-confidence: 0.85
+  clean-sample-rate: 0.05
+  max-samples: 20000
+  model:
+    buckets: 131072
+    dim: 40
+    hidden: 96
+  train:
+    epochs: 80
+    learning-rate: 0.005
+    l2: 0.000001
+    hold-out: 0.2
+    auto-retrain-minutes: 60
+    min-new-samples: 25
+    # Extra model knobs, all wired into NeuralModel.train:
+    #   weight-decay        L2 pull to zero per step. 0 disables.
+    #   grad-clip           absolute gradient ceiling. 0 disables.
+    #   seed                shuffle seed - the same data + seed reproduces a run.
+    #   class-weight-power  0 = no class weighting, 0.5 = sqrt-damped, 1 = full.
+    #   early-stop-patience stop after N epochs without a held-out gain. 0 = off.
+    weight-decay: 0.0
+    grad-clip: 5.0
+    seed: 999
+    class-weight-power: 0.5
+    early-stop-patience: 0
+    label-smoothing: 0.05
+
+tips:
+  enabled: true
+  interval-seconds: 420
+  messages: []
+
+staffmanager:
+  # Where /staffcode delivers the code. Requires DiscordSRV; the name is the
+  # GAME channel name in DiscordSRV's config, not the Discord channel name.
+  #
+  # The code is never printed in game. Holding the rank is not enough - you
+  # also have to be in the staff channel to read it, which is the two-person
+  # property the feature was always described as having but never had, because
+  # nothing anywhere wrote a code and every /promote failed.
+  #
+  # From console (including DiscordSRV's console relay) the code IS printed,
+  # since a command run through Discord is already being read in Discord.
+  discord-channel: 'staff'
+  code-ttl-minutes: 10
+  code-ttl-seconds: 300
+  allowed-actors:
+    - owner
+    - co-owner
+    - executive
+    - dev
+    - manager
+  ladder:
+    - member
+    - helper
+    - jrmod
+    - mod
+    - srmod
+    - jradmin
+    - admin
+    - sradmin
+    - manager
+    - executive
+    - developer
+    - co-owner
+    - owner
+
+rtpqueue:
+  worlds:
+    - world
+    - world_nether
+  world: world
+  timer-seconds: 30
+  min-players: 4
+  max-players: 20
+  cooldown-seconds: 60
+  min-x: -2500
+  max-x: 2500
+  min-z: -2500
+  max-z: 2500
+
+rewards:
+  countdown-seconds: 10
+  key-command: "crate give %player% %crate% %amount%"
+  kit-command: "kit give %kit% %player%"
+  shard-command: "shard give %player% %amount%"
+  # Creator-code money payouts (/redeem createcode ... <money>) run this.
+  money-command: "eco give %player% %amount%"
+  extra-purchase-tabs: []
+  purchase-type-tabs:
+    - rank
+    - bundle
+    - upgrade
+    - crate
+    - kit
+  rank-tab-exclude:
+    - default
+    - member
+    - owner
+    - co-owner
+    - partner
+    - manager
+    - developer
+    - sradmin
+    - admin
+    - jradmin
+    - srmod
+    - mod
+    - jrmod
+    - helper
+    - builder
+    - media
+
+join-alerts:
+  enabled: true
+  alert-groups:
+    - knight
+    - champion
+    - elite
+    - titan
+    - colt
+    - helper
+    - jrmod
+    - mod
+    - srmod
+    - jradmin
+    - admin
+    - sradmin
+    - developer
+    - manager
+    - partner
+    - co-owner
+    - owner
+
+rankgive:
+  command: "lp user %player% parent set %rank%"
+  allowed-ranks:
+    - knight
+    - champion
+    - elite
+    - titan
+    - booster
+    - colt
+
+spawn:
+  world: "Spawn"
+  x: 8
+  y: 106
+  z: 8
+
+cheatdetector-loading:
+  enabled: true
+  seconds: 8
+  message: ""
+
+chat-limiter:
+  enabled: true
+  bypass-permission: "gildedshield.chatlimit.bypass"
+  messages:
+    blocked: "&cPlease slow down and avoid repeating similar messages."
+  rank-scaling:
+    unlimited-groups:
+      - srmod
+      - jradmin
+      - admin
+      - sradmin
+      - developer
+      - manager
+      - partner
+      - co-owner
+      - owner
+    multipliers:
+      elite: 1.35
+      titan: 1.7
+      colt: 2.1
+      helper: 1.5
+      jrmod: 2.0
+      mod: 2.5
+  limits:
+    history-size: 8
+    history-window-ms: 12000
+    exact-repeat-window-ms: 8000
+    exact-repeat-max: 2
+    small-message-max-length: 8
+    small-message-window-ms: 4000
+    small-message-max: 4
+    similarity-min-length: 10
+    similarity-threshold: 0.72
+    common-part-threshold: 0.65
+    repeated-character-min-run: 8
+    dynamic-points-max: 8.0
+    dynamic-decay-per-second: 1.25
+    cost-normal: 1.0
+    cost-small: 1.8
+    cost-similar: 3.0
+    cost-repeat: 4.0
+
+playerwipe:
+  # /playerwipe <player> - reset shards, money, stats, playtime or homes.
+  #
+  # NOTE: this file used to contain TWO 'playerwipe:' blocks. YAML keeps only
+  # the last one, and that one had no categories, which is why the menu opened
+  # empty. There must be exactly one.
+  enabled: true
+
+  # Access is granted by coltcore.playerwipe or a case-insensitive name below.
+  allowed-usernames:
+    - sonionviro
+    - mtyri
+    - jeetu_46
+  # Legacy compatibility: a non-blank owner-name is also accepted.
+  owner-name: ""
+  gui-title: '&8Wipe &8| &f%player%'
+
+  # %player% %stat% %value% are substituted.
+  stat-command: 'statsmgr set %player% %stat% %value%'
+
+  # MIRROR EVERY WIPE TO DISCORD.
+  #
+  # A wipe is destructive and cannot be undone, so the record belongs somewhere
+  # staff cannot quietly delete - which is the whole reason to log it off-server
+  # rather than only to console.
+  #
+  # Needs DiscordSRV installed. With it absent this does nothing and says
+  # nothing. 'channel' is a DiscordSRV GAME channel name, the left-hand side of
+  # its channels map, not a Discord channel ID.
+  discord-log:
+    enabled: true
+    channel: 'staff'
+
+  # Each category is a button. Keys:
+  #   slot / icon / display-name / description / information / warning
+  #   amounts        true = offer preset and custom amounts as well as a reset
+  #   amount-presets the preset buttons
+  #   all-commands   run for "reset all"
+  #   take-commands  run for a specific amount, %amount% is substituted
+  #   stats          non-empty turns this category into a per-counter menu
+  categories:
+    shards:
+      enabled: true
+      slot: 10
+      icon: AMETHYST_SHARD
+      display-name: '&d&lSHARDS'
+      description: 'Shard balance'
+      information:
+        - 'Removes shards from this account.'
+        - 'Reset zeroes the balance; an amount claws back exactly that much.'
+      warning: 'This cannot be undone without a backup.'
+      amounts: true
+      amount-presets: [100, 1000, 10000, 100000]
+      all-commands:
+        - 'shard reset %player%'
+      take-commands:
+        - 'shard take %player% %amount%'
+    economy:
+      enabled: true
+      slot: 11
+      icon: GOLD_INGOT
+      display-name: '&e&lECONOMY'
+      description: 'Money balance'
+      information:
+        - 'Removes money from this account.'
+        - 'Reset zeroes the balance; an amount takes exactly that much.'
+      warning: 'This cannot be undone without a backup.'
+      amounts: true
+      amount-presets: [1000, 10000, 100000, 1000000]
+      all-commands:
+        - 'eco reset %player%'
+      take-commands:
+        - 'eco take %player% %amount%'
+    stats:
+      enabled: true
+      slot: 12
+      icon: PAPER
+      display-name: '&b&lSTATS'
+      description: 'Individual counters'
+      information:
+        - 'Pick one counter to zero, or reset every one of them.'
+      warning: 'Counters cannot be restored once zeroed.'
+      stats:
+        - blocks_broken
+        - blocks_placed
+        - chat_messages
+        - kills
+        - jumps
+        - deaths
+        - items_crafted
+        - mob_kills
+        - money_made
+        - money_spent
+        - playtime
+    playtime:
+      enabled: true
+      slot: 14
+      icon: CLOCK
+      display-name: '&#00ff00&lPLAYTIME'
+      description: 'EssentialsX playtime'
+      information:
+        - 'Resets the playtime EssentialsX has recorded.'
+        - 'Note: this also resets progress towards the active rank.'
+      warning: 'This cannot be undone.'
+      all-commands:
+        - 'essentials:playtime reset %player%'
+
+    inventory:
+      enabled: true
+      slot: 15
+      icon: CHEST
+      display-name: '&f&lINVENTORY'
+      description: 'Everything they are carrying'
+      information:
+        - 'Empties the main inventory, armour and offhand.'
+        - ''
+        - 'Vanilla /clear, so it hits what the player has on'
+        - 'them right now and nothing in storage.'
+      warning: 'Items are destroyed, not dropped. There is no undo.'
+      all-commands:
+        - 'minecraft:clear %player%'
+
+    enderchest:
+      enabled: true
+      slot: 16
+      icon: ENDER_CHEST
+      display-name: '&5&lENDER CHEST'
+      description: 'Ender chest and AxVaults'
+      information:
+        - 'Clears the vanilla ender chest and every AxVaults'
+        - 'page the account owns.'
+        - ''
+        - 'Drop the axvaults line if you do not run AxVaults;'
+        - 'an unknown command is logged and skipped, but there'
+        - 'is no reason to leave it firing.'
+      warning: 'Items are destroyed, not dropped. There is no undo.'
+      # The vanilla ender chest is cleared by the plugin directly - /clear only
+      # empties the main inventory and never touches it, so a command line alone
+      # would have reported success having done nothing. Only AxVaults needs a
+      # command. Delete this line if you do not run AxVaults.
+      all-commands:
+        - 'axvaults clear %player%'
+    homes:
+      enabled: true
+      slot: 15
+      icon: COMPASS
+      display-name: '&a&lHOMES'
+      description: 'EssentialsX homes'
+      information:
+        - 'Deletes every home this account has set.'
+      warning: 'Coordinates are not recoverable afterwards.'
+      all-commands:
+        - 'essentials:delhome %player% *'
+    keys:
+      enabled: true
+      slot: 16
+      icon: TRIPWIRE_HOOK
+      display-name: '&3&lKEYS'
+      description: 'Crate keys'
+      information:
+        - 'Takes every crate key this account holds.'
+      warning: 'Keys are not refunded.'
+      all-commands:
+        - 'crate key take %player% all'
+    rank:
+      enabled: true
+      slot: 22
+      icon: NAME_TAG
+      display-name: '&c&lRANK'
+      description: 'Reset to default'
+      information:
+        - 'Sets the LuckPerms parent group back to default.'
+      warning: 'Paid ranks are lost. Off by default on purpose.'
+      all-commands:
+        - 'lp user %player% parent set default'
+
+  full-wipe:
+    enabled: true
+    slot: 31
+    icon: BARRIER
+    display-name: '&4&lRESET ALL'
+    description: 'Everything at once'
+    information:
+      - 'Runs a full reset of every category listed below, in order.'
+    # Order the categories run in. Leave empty to run every enabled category.
+    categories:
+      - shards
+      - economy
+      - stats
+      - keys
+      - playtime
+      - homes
+    # Anything extra to run after the categories.
+    all-commands: []
+
+creative-guard:
+  bypass-permission: "gildedcreativeguard.bypass"
+  notify-permission: "gildedcreativeguard.notify"
+  owner-names:
+    - "mtyri"
+  messages:
+    blocked: "&cCreative item spawning is owner-only."
+    notify: "&fBlocked &e%player% &ffrom %action% creative item &e%item%&f."
+
+
+
+
+lagguard:
+  enabled: true
+  # Window length for rate counters. 1000ms means limits are per second.
+  general:
+    window-ms: 1000
+
+  # Farm-friendly profile for servers using spigot.yml hopper-transfer: 5 and hopper-amount: 16.
+  # That equals 16 items every 5 ticks = 64 items/sec per hopper.
+  # The limits below allow a merged kelp + bonemeal + bone-block crafter farm in one area,
+  # but still throttle oversized lag machines that spam far beyond a normal farm rate.
+  complex-farms:
+    enabled: true
+    spigot-hopper-transfer-ticks: 5
+    spigot-hopper-amount: 16
+    max-active-hoppers-per-chunk: 320
+    safety-multiplier: 1.35
+
+  # Allows normal farms but throttles extreme redstone clocks/observer spam.
+  redstone:
+    enabled: true
+    max-pulses-per-chunk: 900
+    max-pulses-per-block: 48
+    chunk-cooldown-ms: 1800
+    block-cooldown-ms: 1200
+
+  pistons:
+    enabled: true
+    max-actions-per-chunk: 240
+    max-actions-per-block: 28
+    max-blocks-per-action: 12
+    chunk-cooldown-ms: 1800
+    block-cooldown-ms: 1200
+
+  hoppers:
+    enabled: true
+    transfer-ticks: 5
+    items-per-transfer: 64
+    # Hard cap per source hopper. This implementation never allows above 64/sec.
+    items-per-second: 64
+    # Prevents ColtCore bulk hopper logic from touching vanilla crafters, so disabled crafting slots stay disabled.
+    preserve-crafter-disabled-slots: true
+    bulk-transfer:
+      enabled: true
+    # Raised from the old 240/sec default. Large normal hopper farms can exceed 240/sec per chunk.
+    # Set minimum-safe-limit to 0 if you explicitly want stricter values.
+    max-moves-per-chunk: 8000
+    minimum-safe-limit: 4000
+    chunk-cooldown-ms: 900
+
+  dispensers:
+    enabled: true
+    max-dispenses-per-chunk: 600
+    max-dispenses-per-block: 64
+    chunk-cooldown-ms: 1600
+    block-cooldown-ms: 1000
+
+  density:
+    enabled: true
+    radius: 6
+    max-components: 260
+    # Do not count passive farm infrastructure like hoppers, chests, crafters, composters,
+    # droppers and dispensers as dense redstone by itself. Redstone/piston/dispenser rates
+    # still throttle real spam separately.
+    ignore-farm-infrastructure: true
+
+  entity-burst:
+    enabled: true
+    max-spawns-per-chunk: 450
+    chunk-cooldown-ms: 1800
+
+  alerts:
+    staff-alerts: true
+    # Console alerts are off by default so normal farms do not spam logs.
+    # Audit CSV still records first throttle events.
+    console: false
+    audit-log: true
+    audit-every-cancelled-event: false
+    per-chunk-cooldown-ms: 60000
+
+
+  # Superseded by lagguard.entity-limit below, kept for reference only.
+  # The dedicated minecart limiter was retired: the unified entity limit owns
+  # the per-chunk minecart cap and the refund, and it never notifies players.
+  # Nothing reads these keys any more.
+  minecarts:
+    enabled: true
+    max-per-chunk: 24
+    cleanup-interval-seconds: 3
+    refund-radius: 16
+    notify-player: false
+    remove-overflow-on-chunk-enter: true
+
+  # Queue mode: /gclear clears only the frozen queue from before the clear started.
+  # Items dropped during that clear are protected and queued for the next /gclear.
+  queue-protect-last-second-drops: true
+
+  # ------------------------------------------------------------------
+  # Entity limits and machine-launch refusal
+  # ------------------------------------------------------------------
+  # Vanilla's per-chunk limits govern SPAWNING. They do not see entities a
+  # machine creates: a dispenser clock, a dropper line or a /summon loop
+  # produces entities no spawn limit ever counts. This block is the net under
+  # that, and it is silent to players on purpose - a lag guard that announces
+  # itself tells the player exactly when they tripped it.
+  #
+  # Three things happen here:
+  #   1. A per-chunk cap on non-living entities. Overflow is removed, choosing
+  #      the entities furthest from any player first, so what vanishes is what
+  #      nobody is looking at.
+  #   2. A minecart over the cap is REFUNDED - returned to the nearest player's
+  #      inventory, or dropped in place if nobody is near. A minecart is a
+  #      player's property, not a machine byproduct.
+  #   3. A dispenser, dropper or summon that would create a projectile is
+  #      refused. The item stays inside the container; nothing is lost.
+  #
+  # Why those projectiles specifically: since 1.21 a thrown ENDER PEARL loads
+  # and ticks the 3x3 chunks around it, takes a chunk ticket every time it
+  # changes chunk and again every ten seconds, and keeps doing so while it
+  # travels. A pearl that cannot land can hold nine chunks ticking by itself.
+  # A dispenser aimed at a wall is therefore a chunk-loading machine, which is
+  # what makes this a crash vector rather than a nuisance.
+  entity-limit:
+    enabled: true
+
+    # Cap on counted entities per chunk. Counted = non-living (see below).
+    max-per-chunk: 32
+
+    # Sweep interval for loaded chunks. Chunk-entry events catch the rest, so
+    # this only has to clean up what appeared without one.
+    cleanup-interval-seconds: 3
+
+    # How far from a removed minecart a player may be to receive the refund.
+    refund-radius: 16
+
+    # Per-chunk cap on/off. Off leaves the minecart and dispenser rules alone.
+    per-chunk-cap: true
+
+    # Refuse a dispenser/dropper/summon that would create a projectile or
+    # throwable. This is the rule that stops an arrow clock at its source
+    # instead of cleaning up after it. A player firing their own bow is NOT
+    # affected - only machine-origin and command-origin spawns are refused.
+    refuse-machine-projectiles: true
+
+    # Count dropped item entities toward the cap. A large item spill is a real
+    # lag source, but it can also be someone dying; the cap removes the excess
+    # rather than everything.
+    count-dropped-items: true
+
+    # Count mobs, animals and villagers toward the cap too.
+    #
+    # LEAVE THIS FALSE unless you have a specific reason. Every living type
+    # already has its own vanilla limit, and turning this on will delete farm
+    # animals and spawner output to solve a problem mobs do not cause.
+    count-living-entities: false
+
+    # Log the first refusal of each distinct cause to the console. Not one line
+    # per event - a dispenser clock fires twenty times a second, so per-event
+    # logging would turn the console into the problem. Volume is tracked as a
+    # counter in entitylimit.yml instead.
+    log-refusals: true
+
+    minecarts:
+      enabled: true
+      # Return a removed minecart to a nearby player rather than deleting it.
+      # The cart comes back in the player's inventory SILENTLY - no message.
+      refund: true
+
+
+# Integrated smart tips. Context-aware tips look at recent chat topics and prefer useful matching tips.
+smart-tips:
+  enabled: true
+  interval-seconds: 180
+  prefix: "&#00ff00á´›Éªá´˜ Â» &f"
+  disabled-players: []
+  context:
+    enabled: true
+  tips:
+    - "Use &e/tips off &fto hide tips, or &e/tips on &fto enable them again."
+    - "Vote rewards and vote parties are planned. Use votes to help everyone unlock server-wide rewards."
+    - "Use &e/shop &fto buy/sell common items, and check &e/worth &fbefore selling valuables."
+    - "Spawner storage only drops the visible page, which helps prevent item loss and dupes."
+    - "Use &e/trade &ffor safer deals instead of dropping items on the ground."
+    - "Use &e/ah &for auctions when selling rare items to other players."
+    - "Use &e/settings &fto toggle pay alerts, messages, particles, scoreboard, and other personal options."
+    - "Staff actions are logged. Report suspicious behavior instead of trying to handle it yourself."
+    - "If redstone gets disabled, simplify clocks and avoid rapid repeating circuits in one chunk."
+    - "Use &e/kits &fand &e/playerkits &fwhen available for starter or rank rewards."
+    - "Use &e/rtp &fto find a new area, but do not build too close to spawn."
+    - "CoreProtect logs block changes, so griefing can usually be checked and rolled back."
+  context-tips:
+    vote:
+      - "Voting helps the whole server. Vote parties will give server-wide rewards when enough players vote."
+      - "When Votifier is added, make sure your username is exact so your vote rewards go to the right account."
+    spawner:
+      - "Spawner storage pages are limited on purpose: DROP PAGE only drops the visible page to prevent dupes."
+      - "If a spawner drop looks missing, check the mob's drop file before assuming the spawner is broken."
+    shop:
+      - "Use &e/worth &fbefore selling. Some shops use special currencies like shards or soulshards."
+      - "Bulk selling can be fast, but always check prices before dumping rare items."
+    auction:
+      - "Use auctions for expensive items; trades are better for direct deals with another player."
+    trade:
+      - "Use the trade GUI for deals. Dropping items is risky and may be cleared by clearlag."
+    staff:
+      - "Use reports and staff tools properly. Grim alerts and replays help staff review suspicious PvP."
+    security:
+      - "Never share your password. If you suspect a compromised account, ask staff to unregister/reset it safely."
+    replay:
+      - "Replays start from the first anticheat flag and are saved when the player disconnects or is kicked."
+    lag:
+      - "Fast hoppers and redstone clocks can cause lag. Spread systems across chunks and avoid rapid clocks."
+    settings:
+      - "Use &e/settings &fto toggle pay alerts, scoreboard, messages, particles, and other personal options."
+    tips:
+      - "Use &e/tips off &fto disable tips. Use &e/tips on &fto bring them back."
+
+# Integrated smart redstone guard. It disables noisy redstone by block, chunk, or 32x32-chunk region.
+
+
+stash:
+  # Discord webhook for stash alerts. Blank disables webhook alerts.
+  # Treat this URL as a secret - anyone holding it can post to your staff channel.
+  webhook-url: ""
+  webhook-username: "ColtCore Anti-Cheat"
+  # Who receives in-game alerts. Holders of coltcore.spawnstash are never
+  # flagged by their own traps.
+  alert-permission: "coltcore.spawnstash"
+  # Cancel the block break so the stash stays intact for the next visitor.
+  cancel-breaks: true
+  # Refuses to place a stash somewhere a player could see it without X-ray,
+  # which would otherwise make every detection a false positive.
+  air-gap:
+    enabled: true
+    # How far outside the schematic's bounding box to scan.
+    margin: 3
+    # Connected air volume above this counts as "exposed".
+    max-gap-volume: 60
+    # warn = place anyway and tell the admin | abort = refuse (override with "force")
+    action: warn
+
+deepslate-decoy:
+  # Floods randomly-rotated deepslate to blind base-finders that key off the
+  # AXIS of player-placed deepslate (RotatedDeepslateESP / ChunkFinder).
+  # Off by default - it permanently changes terrain. Run scoped via command.
+  enabled: true
+  # Only these natural filler blocks get overwritten. Never ores, air, or builds.
+  replaceable:
+    - STONE
+    - DEEPSLATE
+    - TUFF
+    - ANDESITE
+    - DIORITE
+    - GRANITE
+  columns-per-run: 40      # decoy columns per /deepslatedecoy run
+  min-length: 4
+  max-length: 20
+  # Natural deepslate band, so decoys look in-place (deepslate axis is cosmetic).
+  min-y: -60
+  max-y: 0
+  # Optional: auto-seed freshly generated chunks (heavier). Off by default.
+  auto-on-chunk-load:
+    enabled: true
+    columns-per-chunk: 3
+
+kelp-growth-control:
+  # Kelp only grows if it was PLAYER-PLACED. Naturally generated / naturally
+  # grown kelp is stopped from growing further. Player-planted kelp grows
+  # normally. Ownership persists in kelp-owned.yml (keyed to the column base).
+  enabled: true
+
+staff-monitor:
+  # Staff audit, risk scoring and AFK analytics. Stored in staffmonitor.db
+  # (SQLite) inside the plugin folder. ONLY players holding the permission
+  # staffmonitor.tracked are recorded - do not give that to everyone.
+  enabled: true
+
+  # No input (move / interact / command) for this long counts as idle.
+  idle-after-seconds: 300
+
+  # Rolling window used when testing a category threshold.
+  suspicious-window-seconds: 600
+
+  # Actions and daily presence rows older than this are pruned automatically.
+  keep-days: 30
+
+  # Days the /staffafk leaderboard sums over. Defaults to keep-days.
+  #
+  # /staffafk ranks staff by TOTAL idle time, worst first, and does not care
+  # whether they are active at this moment. Filtering on "idle right now" made
+  # the staff member who idles eight hours a day look clean the instant they
+  # moved, while someone who stepped away for a minute topped the list. Offline
+  # staff are included too - logging off should not erase the record.
+  afk-leaderboard-days: 30
+
+  gui-titles:
+    main: '&8Staff Monitor'
+    timeline: '&8Timeline &7- &f%staff%'
+    top: '&8Top Staff'
+    activity: '&8Staff Activity'
+    afk: '&8Most AFK Staff'
+
+  # Commands are matched against the bare label - no slash, no plugin prefix,
+  # so "/minecraft:give" tests as "give". First matching category wins, so
+  # order matters. Anything unmatched is filed as OTHER.
+  #   risk      - added to the staff member's 24h risk score per use
+  #   threshold - uses within the window before an alert fires (0 = never)
+  categories:
+    PUNISH:
+      pattern: '(ban|banip|ipban|tempban|mute|tempmute|ipmute|kick|warn|jail)'
+      risk: 5
+      threshold: 8
+    GIVE:
+      pattern: '(give|i|item|more|enchant|repair)'
+      risk: 8
+      threshold: 5
+    WORLDEDIT:
+      pattern: '(/?(set|replace|cut|copy|paste|undo|redo|brush|sphere|cyl|walls|regen|fill|drain))'
+      risk: 6
+      threshold: 20
+    TELEPORT:
+      pattern: '(tp|tpa|tpo|tphere|tpall|teleport|s|top|jumpto|back)'
+      risk: 2
+      threshold: 25
+    VANISH:
+      pattern: '(v|vanish|invsee|openinv|ec|enderchest)'
+      risk: 4
+      threshold: 10
+    ADMIN:
+      pattern: '(op|deop|gamemode|gm|gmc|gms|gamerule|stop|restart|reload|pex|lp|luckperms)'
+      risk: 10
+      threshold: 3
+
+chat-guard:
+  # SCREEN PRIVATE MESSAGES.
+  #
+  # Chat, signs, books and anvil renames were all screened and /msg was not, so
+  # a direct message went straight past the whole filter. That is also where it
+  # does the most damage - nobody else sees it, so nobody reports it.
+  #
+  # Only the message text is read. For /msg and /tell the recipient's name is
+  # skipped as well: a player called something offensive is a username problem
+  # for staff, not a reason to punish whoever messaged them.
+  #
+  # Empty = the defaults below.
+  screen-commands:
+    - msg
+    - tell
+    - w
+    - whisper
+    - pm
+    - m
+    - dm
+    - message
+    - r
+    - reply
+    - mail
+    - emsg
+    - etell
+    - ewhisper
+    - pc
+    - party
+    - helpop
+    - ac
+    - gc
+
+  # BUILT-IN LEXICON. ENGLISH ONLY.
+  #
+  # Two lists. 382 crude and sexual terms from LDNOOBW, punished as PROFANITY,
+  # and 100 slurs and organised-hate terms punished as HATE. They are separate
+  # because they are not the same offence - shipped as one list, either a swear
+  # was punished as hate speech or a slur was punished as a swear.
+  #
+  # The 24-language version was removed. It was measurably worse than nothing
+  # for those languages: every term is also encoded phonetically, and the
+  # encoder is an ENGLISH metaphone, so a Czech or Filipino word came out as
+  # one or two characters of debris - "cu" as K, "pau" as P - and a one-letter
+  # code matches most sentences. That is why "gg wp" was reported as a slur and
+  # "brb food" matched four foreign terms at once.
+  #
+  # Your own 'terms' below are ADDED to these, never replaced by them, and are
+  # treated as hate.
+  use-builtin-lexicon: true
+
+  # The text guard. Covers chat, signs, written books and anvil item renames.
+  # Regex and bypass normalisation run first, then the in-process local model.
+  enabled: true
+  context:
+    enabled: true
+    log-drops: false
+  # DELETE the offending message. Chat is cancelled before anyone sees it, and
+  # the same applies to signs, books and anvil renames - the sign is never
+  # placed and the rename never applies.
+  cancel-message: true
+  # This many matches of a term inside ONE message settles it by regex alone.
+  repeat-fast-path: 2
+  # Detect and record, but apply no punishment. Turn this on for a day first.
+  dry-run: false
+
+  # ---- Escalation ladder --------------------------------------------------
+  # One list per category. The rung used is the number of prior offences the
+  # player already has in that category inside ladder-window-days; past the end
+  # of the list the last rung repeats forever.
+  #
+  # Rungs: WARN | MUTE <duration> | IPMUTE <duration> | NONE
+  # Durations: 30m, 12h, 1d, 3d, 1w, or permanent.
+  #
+  # IPMUTE also silences alt accounts connecting from the same address, which
+  # is what makes the last rung stick.
+  ladder-window-days: 30
+  ladder:
+    # Shape of every ladder: WARN, then a base mute, then THREE more steps,
+    # the last of which is permanent. Five rungs. Past the end the last rung
+    # repeats, so a sixth offence is still permanent.
+    #
+    # The same ladder applies to chat, signs, books and anvil item names - the
+    # category decides the punishment, not where it was typed.
+
+    # Racial and ethnic slurs, hate speech. Includes phonetic evasions.
+    # Owner's table: starts at a day, no warning rung. NSFW speech shares this
+    # ladder because the table folds it in explicitly.
+    hate:
+      - 'WARN'
+      - 'WARN'
+      - 'BAN 1d'
+      - 'BAN 3d'
+      - 'BAN 7d'
+      - 'BAN 28d'
+      - 'IPBAN permanent'
+
+    # Telling someone to kill themselves, threats of violence.
+    death-threat:
+      - 'STAFF-ONLY'
+
+    # Sexual content in chat.
+    # Same ladder as hate - the table lists NSFW speech under racism/hate.
+    nsfw:
+      - 'WARN'
+      - 'WARN'
+      - 'BAN 1d'
+      - 'BAN 3d'
+      - 'BAN 7d'
+      - 'BAN 28d'
+      - 'IPBAN permanent'
+
+    # Sustained targeting of one player. STAFF DECISION, not automated.
+    #
+    # Removed from the model: it measured 89.2% precision, the worst of any
+    # class, and it failed towards accusing ordinary blunt chat. Harassment is
+    # defined by intent and repetition, and a classifier looking at one message
+    # can see neither. Staff have the history; the model does not.
+    harassment:
+      - 'STAFF-ONLY'
+
+    # Naming another server without an address. Its own ladder because it is
+    # its own offence - the same intent with the address left out.
+    light-advertising:
+      - 'WARN'
+      - 'WARN'
+      - 'MUTE 1d'
+      - 'MUTE 3d'
+      - 'MUTE 7d'
+      - 'MUTE 28d'
+      - 'IPMUTE permanent'
+
+    # Ordinary swearing from the built-in lexicon. NOT hate speech - routing
+    # every lexicon hit to the hate ladder would mean a one-day mute for saying
+    # "fuck", which is absurd where PvP trash talk is the normal register.
+    profanity:
+      - 'WARN'
+      - 'WARN'
+      - 'BAN 1d'
+      - 'BAN 3d'
+      - 'BAN 7d'
+      - 'BAN 28d'
+      - 'IPBAN permanent'
+
+    # NOT softened. Posting an address or invite is never accidental and it is
+    # the one offence that costs the server players directly, so the second
+    # offence is still the last one.
+    # Heavy advertising - an actual address. One offence, no warning rung.
+    # Never accidental, and it is the offence that costs the server players.
+    advertising:
+      - 'WARN'
+      - 'WARN'
+      - 'MUTE 1d'
+      - 'MUTE 3d'
+      - 'MUTE 7d'
+      - 'MUTE 28d'
+      - 'IPMUTE permanent'
+
+    # ADVERTISING ON SIGNS - Immediate permanent IP ban.
+    # Signs are permanent and visible to all players. Advertising on a sign
+    # is never accidental and is treated as the most severe form of advertising.
+    sign-advertising:
+      - 'IPBAN permanent'
+
+    # NOT softened, and NOT automated.
+    #
+    # Doxxing is decided by a human, always. The model no longer has a doxxing
+    # label at all - PatternPack detects it, the message is deleted, and staff
+    # are alerted to decide. Nothing here fires on its own.
+    #
+    # The reason is asymmetry: telling a leak apart from someone posting their
+    # own contact details needs judgement, and the punishment is an IP ban that
+    # takes out everyone in the household. Measured earlier in this project, the
+    # detector flagged "bob@gmail.com is my email" as doxxing - that is now
+    # fixed, but it is exactly the class of mistake that must not be automatic.
+    #
+    # Staff apply it by hand.
+    doxxing:
+      - 'STAFF-ONLY'
+
+    # Organising a chat flood.
+    spam-incite:
+      - 'STAFF-ONLY'
+
+  # ---- Phonetic evasion --------------------------------------------------
+  #
+  # Catches a term said out loud rather than spelled: "knee gear", "nick gur",
+  # "deal dough", "gabe horn". Every character is innocent; only the
+  # pronunciation is not.
+  #
+  # You do NOT list the evasions. Put the real word in 'terms' once and every
+  # homophone of it is caught automatically, including ones nobody has invented
+  # yet. That is the whole point - a list of known bypasses is permanently one
+  # step behind whoever is writing new ones.
+  # Matches a word by how it SOUNDS, so a slur respelled to survive the literal
+  # filter is still caught: phaggot, fgt, reetard, f a g g o t.
+  #
+  # HATE TERMS ONLY. Nobody constructs a homophone to get "busty" past a
+  # filter. Running this over the profanity list was measured at 7.1% of real
+  # server chat flagged - "come here" scored as camwhore, "told you" as dildo.
+  #
+  # ONE WORD AT A TIME. Multi-word spans were built and removed. They are what
+  # the textbook "knee gear" evasion needs, but "no gear", "neth gear" and
+  # "need gear" encode identically to that slur and are said constantly on a
+  # Minecraft server, while "knee gear" is said never.
+  #
+  # Terms are VETTED AT LOAD against commonwords.txt and dropped from this
+  # layer if their pronunciation is indistinguishable from an ordinary word -
+  # kraut/great, chinks/chunks, fags/fix, coons/coins, spic/spec. They are
+  # still matched literally, so nothing stops being punished; it just stops
+  # being guessed at. Your own terms are vetted on the same evidence, and the
+  # startup log names anything it drops.
+  # Words that are innocent but sit inside a blocked term.
+  #
+  # "im from niger" and "im from nigeria" were both punished as hate speech.
+  # Two causes: "niger" was a term and "nigeria" contains it, and because
+  # normalisation strips separators before the term patterns run there is no
+  # word boundary left to stop a five-letter term matching inside a country.
+  # The phonetic code of "niger" is also identical to the slur's.
+  #
+  # These are MASKED, not allowed. Only the exempt word is blanked out - the
+  # rest of the sentence is screened as normal, so "im from nigeria you <slur>"
+  # still lands. An allowlist would have made the country name a free pass.
+  #
+  # Setting this to a list of your own REPLACES the defaults below.
+  exempt-words:
+    - niger
+    - nigeria
+    - nigerian
+    - nigerians
+    - nigerien
+    - niggardly
+    - niggling
+    - snigger
+    - sniggering
+    - cockpit
+    - cocktail
+    - scunthorpe
+    - penistone
+    - analysis
+    - analyse
+    - analyze
+    - assassin
+    - assume
+    - assumption
+    - classic
+    - grape
+    - shiitake
+    - therapist
+
+  phonetic:
+    enabled: true
+
+    # Extra sounds a span may carry and still match. INSERTIONS ONLY, never
+    # substitutions.
+    #
+    # 0 is the default because 1 was measured and it is too loose at this code
+    # length: at 1, "cracked" matched raghead and "nuclear" matched a racial
+    # slur, and the vetting then discarded the slur to protect the innocent
+    # word. Raise it only if you are also willing to grow commonwords.txt.
+    max-inserted-sounds: 0
+
+    # Terms with fewer consonant sounds than this are not matched by sound at
+    # all. At two sounds a code is not a fingerprint - "K" and "SP" appear in
+    # most sentences, which is exactly how "kkk" came to be reported as an
+    # unrelated Swahili word.
+    min-code-length: 3
+
+    # Phrases to never flag phonetically, if a real word on your server
+    # collides with a term.
+    allow: []
+
+  # Mutes are enforced by ColtCore itself - it does not need a punishment
+  # plugin to exist. If you also want your punishment plugin to keep its own
+  # record, put a command here and it runs alongside. %player% %duration%
+  # %reason% %ip% are substituted. Leave blank to run nothing.
+  ladder-commands:
+    WARN: ''
+    MUTE: ''
+    IPMUTE: ''
+
+  muted-message: '&cYou are muted. &7Remaining: &f%remaining%&7. Reason: &f%reason%'
+  # Signs, books and anvil renames are also blocked while muted - a mute that
+  # only covers chat is a mute a player writes around.
+  mute-blocks-text-sources: true
+  # Commands a muted player may not run. Bare labels, no slash.
+  mute-blocked-commands:
+    - msg
+    - tell
+    - w
+    - r
+    - reply
+    - me
+    - mail
+    - helpop
+    - ac
+    - broadcast
+
+  # ---- Advertising --------------------------------------------------------
+  advertising:
+    enabled: true
+    # "play (dot) example (dot) com", "play . example . com" and
+    # "play,example,com" are all folded back to an address before matching.
+    # Only these TLDs count, so "e.g" and "vs.io" style noise does not trip it.
+    # Empty list = accept any 2-10 letter TLD (noisier).
+    # EMPTY MEANS EVERY TLD, and that is the default on purpose.
+    #
+    # This used to be an allowlist of 29 TLDs. That is the bypass: a host on
+    # any TLD outside the list was skipped entirely, so bloodmoon.bot.nu and
+    # UnstableSMP.xubi.org went straight through while play.example.com was
+    # caught. There are over 1,500 TLDs and free hosts sit on the obscure
+    # ones precisely because filters enumerate the common ones.
+    #
+    # Leave it empty. Put entries here only to NARROW detection deliberately.
+    tlds: []
+    # Your own addresses. Telling someone the server IP is not advertising.
+    allow:
+      - coltcore.net
+      - discord.gg/coltcore
+    # Skip IPv4 matches shaped like a Minecraft version ("1.21.4.1").
+    ignore-version-like: true
+
+  spam:
+    max-messages: 5
+    window-seconds: 7
+    duplicate-memory: 3
+    min-length-for-duplicate: 6
+    similarity-threshold: 0.85
+    max-caps-percent: 70
+    min-length-for-caps: 12
+
+  # Plain words only - do NOT write regex here. Each entry is compiled into a
+  # bypass-tolerant pattern automatically, so one entry already covers
+  # leetspeak, number/letter swaps (n1663ars), spacing, dots, stretching,
+  # reversal, Cyrillic lookalikes and upside-down text.
+  # Ships empty on purpose: this list is yours to fill.
+  terms: []
+
+active-rank:
+  # Grants a rank once a player has genuinely played long enough.
+  #
+  # Playtime comes from the server's own PLAY_ONE_MINUTE statistic, which
+  # counts ticks since the account first joined. No playtime plugin needed and
+  # nothing for a player to reset.
+  enabled: true
+
+  required-hours: 10
+  rank: 'active'
+
+  # %player% %rank% %hours% are substituted. Point this at your permission
+  # plugin. "parent add" keeps their existing rank; use "parent set" to replace.
+  grant-command: 'lp user %player% parent add %rank%'
+  # Anything else to run on grant - a reward, a broadcast, a Discord webhook.
+  extra-commands: []
+
+  announce: true
+  announce-message: '&8[&#00ff00Active&8] &e%player% &7hit &#00ff00%hours%h &7played and earned the &#00ff00ACTIVE &7rank!'
+  player-message: '&aYou have played &f%hours%h &aand earned the &#00ff00ACTIVE &arank.'
+
+  # How often online players are re-checked, so someone crossing the line
+  # mid-session does not have to relog.
+  check-interval-seconds: 300
+
+staff-macro:
+  # Catches STAFF who are AFK-farming, macroing or auto-clicking.
+  #
+  # Two stages, in this order:
+  #   1. consistency - we watch click intervals, movement and chat for the kind
+  #      of regularity a human does not produce. Nothing is flagged here.
+  #   2. verification - only then do we look at GrimAC's movement simulation.
+  #      If Grim reproduced the movement tick for tick with almost no variety,
+  #      the input really is a loop. That is the flag.
+  #
+  # With GrimAC absent there is nothing to verify against, so detections are
+  # logged and not acted on. Set require-grim-verification to false to accept
+  # stage one alone, and expect false positives if you do.
+  enabled: true
+
+  require-grim-verification: true
+
+  # Only these LuckPerms primary groups are analysed. Everyone else is ignored
+  # and their input is never even collected.
+  staff-ranks:
+    - helper
+    - jrmod
+    - mod
+    - srmod
+    - jradmin
+    - admin
+    - sradmin
+    - manager
+    - co-owner
+    - owner
+
+  # Rolling window the input samples are kept for.
+  window-seconds: 120
+  # Movement is sampled at most this often, so PlayerMoveEvent stays cheap.
+  move-sample-ms: 250
+  alert-cooldown-seconds: 300
+
+  cycle:
+    # What gives a macro away is not that its actions are identical - a decent
+    # one varies them - but that the CYCLE comes round on the same clock. A
+    # one-second loop that returns within a few milliseconds of one second,
+    # every second, for a minute, is software. A person deliberately trying to
+    # hold that rhythm drifts by tens of milliseconds within a few repeats.
+
+    # Samples needed in a stream before it is looked at.
+    min-samples: 24
+    # How many times the pattern must come round.
+    min-repeats: 6
+    # How much of each repeat has to match the one before it.
+    #
+    # This falls off faster than the diversity causing it: a match needs BOTH
+    # ends unvaried, so a cycle where a fraction d of actions differ scores
+    # about (1-d)^2. A quarter of actions varying gives ~0.56, which is why the
+    # default is 0.5 and not 0.75. The match ratio only has to be good enough
+    # to establish the period; the timing below is what decides.
+    min-pattern-match: 0.5
+    # Cycle lengths considered. The default window is centred on the one-second
+    # loops that AFK farms and jump macros produce.
+    period-min-ms: 400
+    period-max-ms: 5000
+    # THE DECIDING NUMBER: the envelope.
+    #
+    # A macro is either perfect or it randomises inside a fixed bound -
+    # sleep(1000 +- 40) never produces 1400. A human has no bound. Given long
+    # enough they always cross it: they look away, read chat, hesitate, stand up.
+    #
+    # So this measures the single WORST repeat as a fraction of the cycle
+    # length. 0.25 means no repeat was ever more than a quarter off the average.
+    #
+    # Measured over 200 runs of a 60-second, one-second cycle:
+    #   macro, perfect                       0.000
+    #   macro, +-8ms bounded jitter          0.015 - 0.032
+    #   macro, +-25ms bounded jitter         0.044 - 0.098
+    #   macro, +-40ms bounded jitter         0.072 - 0.156
+    #   macro, +-80ms bounded jitter         0.139 - 0.325
+    #   human, 5% pauses up to 1s            0.109 - 1.997
+    #   human, 10% pauses up to 2s           0.451 - 2.660
+    #   human grinding, 15% pauses up to 3s  0.650 - 3.555
+    max-envelope: 0.25
+
+    # How long a loop must be watched before "it never crossed the bound" means
+    # anything. A macro's bound never moves, so watching longer costs it
+    # nothing; a human's worst moment keeps getting worse. Share of humans
+    # (2% pause rate - unusually steady) still under the envelope:
+    #   30s  63%      60s  32%      120s  17%
+    # A macro at +-40ms stays at 100% for all three. 90s is the balance point.
+    # Must be shorter than window-seconds above, or nothing is ever decided.
+    min-duration-seconds: 90
+
+  chat-check:
+    # A loop proves automation, not absence. Before anyone is called AFK they
+    # are asked in chat to type a short random code. Answer it and the
+    # suspicion is dropped and the samples start over. Silence for the whole
+    # window, while the loop keeps running, is the flag.
+    #
+    # The code is generated per check, so it cannot be baked into the macro
+    # that caused the suspicion.
+    enabled: true
+    timeout-seconds: 60
+    code-length: 4
+    message: '&8[&cAFK check&8] &fType &e%code% &fin chat within &e%seconds%s &for you will be marked AFK.'
+    passed-message: '&aAFK check passed. Thanks.'
+    announce: '&8[&cStaffMacro&8] &7AFK check sent to &f%player%&7.'
+
+  grim:
+    # How many prediction offsets to keep per player.
+    samples: 40
+    # Share of ticks Grim simulated exactly (offset below 0.001).
+    min-perfect-fraction: 0.9
+    # Distinct offset values over sample count. Human input is varied.
+    max-distinct-fraction: 0.25
+
+  # Run when a staff member is flagged. %player% %reason% are substituted.
+  # Left empty on purpose: this should alert a human, not punish automatically.
+  flag-commands: []
+
+punishments:
+  # Where mutes and bans actually land.
+  #
+  #   auto      use LiteBans if installed, else any detected ban plugin, else internal
+  #   litebans  always dispatch LiteBans commands
+  #   external  always dispatch external commands (Essentials, AdvancedBan, BanManager, etc.)
+  #             set templates under punishments.external to match your plugin
+  #   commands  alias for external
+  #   vanilla   alias for external (vanilla /ban)
+  #   internal  always enforce with ColtCore's own store (textguard.db)
+  #
+  # With LiteBans in charge, every mute and ban this plugin decides on is issued
+  # as a LiteBans command, so it appears in /history and /checkban exactly like
+  # one a staff member typed by hand, and LiteBans owns the enforcement and the
+  # ban screen. ColtCore stops cancelling chat itself so nobody gets two mute
+  # messages for one message they typed.
+  #
+  # What stays with ColtCore either way: the offence ledger. LiteBans counts
+  # per account; the ladder here escalates per ADDRESS and per reason, which
+  # LiteBans has no concept of.
+  backend: auto
+
+  # LiteBans command templates. %player% %duration% %reason% %staff% %ip%.
+  #
+  # The -PERMANENT variants leave the time argument out entirely, because
+  # LiteBans treats "/ban player reason" with no time as permanent.
+  litebans:
+    WARN: 'warn %player% %reason%'
+    MUTE: 'mute %player% %duration% %reason%'
+    MUTE-PERMANENT: 'mute %player% %reason%'
+    IPMUTE: 'ipmute %player% %duration% %reason%'
+    IPMUTE-PERMANENT: 'ipmute %player% %reason%'
+    BAN: 'ban %player% %duration% %reason%'
+    BAN-PERMANENT: 'ban %player% %reason%'
+    IPBAN: 'ipban %player% %duration% %reason%'
+    IPBAN-PERMANENT: 'ipban %player% %reason%'
+    UNMUTE: 'unmute %player%'
+    UNBAN: 'unban %player%'
+  external:
+    # EssentialsX-compatible templates. Adjust if your ban plugin uses different syntax.
+    # %player% %duration% %reason% %staff% %ip% - %duration% is like 1d, 7d, 1w or empty for permanent.
+    WARN: 'warn %player% %reason%'
+    MUTE: 'tempmute %player% %duration% %reason%'
+    MUTE-PERMANENT: 'mute %player% %reason%'
+    IPMUTE: 'tempmute %player% %duration% %reason%'
+    IPMUTE-PERMANENT: 'mute %player% %reason%'
+    BAN: 'tempban %player% %duration% %reason%'
+    BAN-PERMANENT: 'ban %player% %reason%'
+    IPBAN: 'tempbanip %player% %duration% %reason%'
+    IPBAN-PERMANENT: 'banip %player% %reason%'
+    UNMUTE: 'unmute %player%'
+    UNBAN: 'unban %player%'
+    UNBANIP: 'unbanip %player%'
+
+
+  # How often the sweep runs. It also runs once a minute after startup, so a
+  # server that restarts often still prunes.
+  interval-hours: 6
+
+  # Revoked or long-expired mutes and bans are removed after this. An ACTIVE
+  # punishment is never removed, however old it is.
+  punishment-keep-days: 90
+
+  # Offence records are the escalation ladder's memory. Deleting them hands a
+  # repeat offender a clean slate, so this is OFF by default (0 = keep forever).
+  # Set it only if you want ladders to decay, and note that chat-guard's
+  # ladder-window-days already limits how far back the ladder counts.
+  offence-keep-days: 0
+
+  # Log a line when rows are removed.
+  log-results: true
+
+  # Not covered here, deliberately:
+  #   ips           tiny, and they are what links alts
+  #   staffmonitor  prunes itself on its own keep-days schedule
+
+languages:
+  # Multi-language support.
+  #
+  # NOTHING HERE IS REQUIRED. The machinery below already works in every script
+  # without configuration: detection, normalisation, tokenisation, the term
+  # list, the classifier features and the evidence ledger are all script aware.
+  # This section is only for adding vocabulary the built-in English lists
+  # cannot cover.
+  #
+  # WHAT WAS BROKEN BEFORE: word extraction filtered on [^a-z0-9\s], so a
+  # message in Hindi, Arabic, Chinese, Russian, Thai, Tamil, Bengali, Japanese,
+  # Korean or Greek became an EMPTY STRING. Not degraded - empty. Twenty-nine of
+  # the thirty most spoken languages produced no features and matched no terms.
+  # Separately, the lookalike table that unmasks Cyrillic glyphs hidden inside
+  # English was corrupting genuine Russian: "Ñ‚Ñ‹ Ð¸Ð´Ð¸Ð¾Ñ‚" came out as "t...ot".
+  # Both are fixed; the table now only runs on dominantly Latin text.
+
+  # Verified working end to end, term matching included:
+  #   Latin        English, Spanish, Portuguese, French, German, Italian, Dutch,
+  #                Polish, Turkish, Vietnamese, Indonesian/Malay, Swahili,
+  #                Nigerian Pidgin, and romanised forms - Hinglish, Arabizi
+  #   Cyrillic     Russian, Ukrainian
+  #   Arabic       Arabic (all dialects), Urdu, Persian/Farsi
+  #   Devanagari   Hindi, Marathi
+  #   Bengali      Bengali        Gurmukhi   Punjabi      Gujarati  Gujarati
+  #   Tamil        Tamil          Telugu     Telugu       Malayalam Malayalam
+  #   Han          Mandarin       Kana       Japanese     Hangul    Korean
+  #   Thai         Thai           Greek      Greek
+  #
+  # Romanised variants need no special handling: Hinglish and Arabizi are Latin
+  # script, so they are tokenised normally. Arabizi digits are handled by
+  # emitting both the raw and the leet-folded character runs as features - in
+  # leetspeak 3 is an e, in Arabizi 3 is Ø¹, and rather than pick a winner both
+  # readings are fed to the model, which learns which one predicts what.
+
+  # Extra phrases for the structural detectors, in ANY language or script.
+  # The built-in lists are English because that is what can be shipped
+  # responsibly and verified. Each entry is compiled bypass-tolerant and
+  # normalised exactly like the English ones.
+  death-threat-phrases: []
+    # - 'Ø®Ù„ÙŠÙƒ ØªÙ…ÙˆØª'
+    # - 'à¤®à¤° à¤œà¤¾'
+    # - 'åŽ»æ­»å§'
+
+  spam-incite-phrases: []
+    # - 'à¤¸à¤¬ à¤¸à¥à¤ªà¥ˆà¤® à¤•à¤°à¥‹'
+    # - 'å¤§å®¶åˆ·å±'
+
+  # The hate/slur term list itself stays in chat-guard.terms, which accepts any
+  # script. One list, any mix of languages - the compiler normalises each entry
+  # into the same space as the message it is tested against.
+
+console-guard:
+  # Screens the server's own console output with the same rules as chat.
+  #
+  # A lot of player text never reaches AsyncPlayerChatEvent: chat plugins that
+  # render messages themselves, cross-server bridges, staff channels, /msg
+  # handled by another plugin, command arguments. All of it lands in the
+  # console. Anything a plugin prints, this sees.
+  #
+  # It cannot delete anything - by the time a line is in the console the message
+  # has already been sent - so it reports and escalates through the ladder. The
+  # deletion half is handled by the live chat, sign and book listeners.
+  enabled: true
+
+  scan-chat: true
+  scan-commands: true
+
+  # Leave empty to use the built-in patterns, which cover vanilla, most chat
+  # plugins and the common bridge formats. Group 1 must be the player name and
+  # group 2 the text.
+  chat-patterns: []
+  command-patterns: []
+
+  # Lines containing any of these are skipped. This plugin's own prefixes are
+  # always ignored, or one detection would print a line containing the offending
+  # text, which would be detected, which would print another line.
+  ignore-containing: []
+
+redstone:
+  # TPS-tiered governor. Vanilla at the top of the ladder; each drop in TPS
+  # steps the redstone speed down one tier; below every tier it freezes.
+  #
+  # A skipped update HOLDS the current power level rather than forcing it to
+  # zero, so circuits pause instead of collapsing and nothing needs repairing
+  # when TPS recovers. Frozen ("factor: 0") therefore means paused, not torn
+  # down - farms stall but stay intact.
+  enabled: true
+
+  # Highest tier the current TPS reaches wins. TPS below every tier freezes
+  # redstone entirely. Factors are clamped to 0..1.
+  #   19.0 -> 1.00x   18.0 -> 0.85x   17.5 -> 0.75x
+  #   15.0 -> 0.50x   12.5 -> 0.25x   below -> frozen
+  tiers:
+    - tps: 19.0
+      factor: 1.0
+    - tps: 18.0
+      factor: 0.85
+    - tps: 17.5
+      factor: 0.75
+    - tps: 15.0
+      factor: 0.5
+    - tps: 12.5
+      factor: 0.25
+
+  # How often TPS is re-read, in ticks. Per-event reads would be far more
+  # expensive than the throttle saves.
+  sample-ticks: 20
+
+  # coltcore.redstone.exempt holders are never throttled.
+
+redstone-unstaler:
+  # Every 3 seconds this walks ONLY the redstone blocks that recently carried
+  # current (never a world scan) and repairs any that stayed switched on while
+  # nothing around them feeds power any more - ghost dust, lit torches with a
+  # powered mount, repeaters clamped to a dead line.
+  enabled: true
+
+  # Sweep period in ticks. 60 = every 3 seconds.
+  period-ticks: 60
+
+  # Safety valves so the repair pass can never itself become the lag source.
+  max-per-sweep: 512
+  max-tracked: 65536
+
+  # sync      - re-run physics on the component and its neighbours so vanilla
+  #             re-resolves the signal. Farm-safe; nothing that has a real power
+  #             source is ever changed.
+  # turn-off  - also force the component's powered flag off. Stricter, good
+  #             against ghost-powered lag machines; comparators are exempt and
+  #             always just resynced (input could be a container).
+  action: sync
+
+  # Log every fixed block. Off by default; enable when investigating a farm.
+  log-repairs: false
+
+
+review:
+  # Human sign-off on automated punishments, and the training loop it feeds.
+  #
+  # When a detection fires and an eligible reviewer is online, the punishment is
+  # HELD and offered to them as a clickable approve/deny prompt. Their answer
+  # decides what happens - and is recorded as a training example with the best
+  # label the system can get: a human who read the actual message in context.
+  #
+  # This is what makes training work. The classifier's weak axis was never
+  # precision, it was recall, because it only ever saw as much varied labelled
+  # data as the server happened to produce. Every review adds one more, and a
+  # DENY is worth more than an approve: false positives are exactly what a model
+  # trained only on its own successes never learns to avoid.
+  #
+  # ENABLED. Give admins the node or nothing will ever be reviewed:
+  #   lp group admin permission set coltcore.review
+  # With no eligible reviewer online, no-reviewer below decides - and the
+  # default keeps the old behaviour rather than quietly letting things through.
+  enabled: true
+
+  # WHO CAN REVIEW: holders of coltcore.review - meant for admin and above -
+  # who are NOT currently flagged AFK by staff-macro. Someone whose input is a
+  # machine loop is by definition not reading chat; handing them the queue would
+  # either stall it or harvest a rubber stamp from a macro. They are told to
+  # answer their AFK check first.
+  #
+  # Give the node: lp group admin permission set coltcore.review
+
+  # How long a decision waits before the fallback takes over. Nothing waits
+  # forever, or an unanswered queue becomes a silent amnesty.
+  timeout-seconds: 120
+
+  # What happens when NO eligible reviewer is online, or the timeout expires:
+  #   APPLY     punish exactly as it would without this module (default)
+  #   DROP      punish nobody
+  #   ESCALATE  punish nobody, but alert staff so a human sees it later
+  no-reviewer: APPLY
+
+  # Categories held for a human. Use '*' for everything.
+  #
+  # The defaults hold back the judgement calls and let the unambiguous
+  # structural detections through: an email address or a phone number in chat
+  # is not a matter of opinion, and waiting two minutes to remove it is worse
+  # than removing it now. Add 'doxxing' or 'death-threat' here if you would
+  # rather a human confirmed even those.
+  categories:
+    - hate
+    - harassment
+    - advertising
+    - spam-incite
+
+  # Safety valve: past this many waiting reviews, punishments apply without
+  # review rather than queueing without limit.
+  max-pending: 20
+
+
+daily-rewards:
+  # Once per calendar day, in this timezone. A missed day resets the streak to
+  # one, so this is a consecutive-day streak rather than a running total.
+  enabled: true
+  timezone: 'UTC'
+  # The reward granted is the highest entry whose 'day' is at or below the
+  # player's current streak. Adding day-14 or day-30 needs no code change.
+  #
+  # Every command runs from console, so use the plugin's own command syntax.
+  # Placeholders: %player% %uuid% %reward% %streak% %hours%
+  rewards:
+    day-1:
+      day: 1
+      enabled: true
+      commands:
+        - 'eco give %player% 250'
+    day-3:
+      day: 3
+      enabled: true
+      commands:
+        - 'eco give %player% 500'
+    day-7:
+      day: 7
+      enabled: true
+      commands:
+        - 'crate give %player% common 1'
+
+playtime-rewards:
+  # Cumulative playtime, counted in whole hours from Bukkit's own statistic, so
+  # it survives restarts and covers time played before this module existed.
+  #
+  # Each entry can be claimed exactly once, ever. The claim is recorded in
+  # rewards.yml next to the daily streak.
+  enabled: true
+  rewards:
+    first-hour:
+      hours: 1
+      enabled: true
+      commands:
+        - 'eco give %player% 500'
+    five-hours:
+      hours: 5
+      enabled: true
+      commands:
+        - 'crate give %player% common 1'
+    twenty-hours:
+      hours: 20
+      enabled: true
+      commands:
+        - 'crate give %player% rare 1'
+
+# ---------------------------------------------------------------------------
+# ANTI-AD PIPELINE - layers 2 and 3 of the advertising filter.
+#
+# Layer 2 is a fastText-style neural classifier (antiad.ft.bin, ~3.6 MB,
+# trained offline on Common Crawl 300d subword vectors + the server corpus).
+# Layer 3 is a locally hosted LLM, asked for a second opinion only when the
+# classifier is unsure (confidence between 0.40 and 0.85). Both fail OPEN:
+# a missing model or an unreachable LLM means messages pass, never punish.
+anti-ad:
+  own-domain: 'coltcore.net'
+  l2:
+    enabled: true
+    model-resource: '/antiad.ft.bin'
+  l3:
+    enabled: true
+    # One LLM call per player per gap. Everything else in the ambiguous band
+    # falls back to the heuristic aggregator instead of queueing requests.
+    min-call-gap-ms: 10000
+    context-messages: 5
+  llm:
+    # Any OpenAI-compatible chat completions endpoint. Default is a local
+    # millenium-5 server on loopback - nothing leaves the machine.
+    endpoint: 'http://127.0.0.1:8080/v1/chat/completions'
+    model: 'millenium-5'
+    api-keys: [ 'local' ]
+    timeout-seconds: 8
+  log:
+    keep-days: 30

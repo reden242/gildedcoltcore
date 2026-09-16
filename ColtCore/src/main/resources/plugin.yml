@@ -1,0 +1,293 @@
+name: ColtCore
+loadbefore:
+- VirtualSpawner
+version: 1.9.1
+main: com.coltcore.core.ColtCorePlugin
+api-version: '1.21'
+author: ColtCore
+softdepend:
+- GrimAC
+- LiteBans
+- ProtocolLib
+- InteractiveChat
+- Essentials
+- Vault
+- LuckPerms
+- RoseStacker
+depend:
+- WorldEdit
+commands:
+  coltcore:
+    description: Reload ColtCore.
+    usage: /coltcore reload
+    permission: coltcore.admin
+  announce:
+    description: Broadcast a ranked announcement.
+    usage: /announce <message>
+    permission: coltcore.announce
+  keyall:
+    description: Reward everyone with keys.
+    usage: /keyall <crate> [amount]
+    permission: coltcore.admin.keyall
+  kitall:
+    description: Reward everyone with a kit.
+    usage: /kitall <kit> [amount]
+    permission: coltcore.admin.kitall
+  shardall:
+    description: Reward everyone with shards.
+    usage: /shardall <buyer> <purchase text...> <amount>
+    permission: coltcore.admin.shardall
+  rankgive:
+    description: Give a paid rank from console/admin integrations.
+    usage: /rankgive <player> <rank>
+    permission: coltcore.rankgive
+  joinalerts:
+    description: Toggle staff/rank join alerts for yourself.
+    usage: /joinalerts
+    permission: coltcore.joinalerts
+  announcements:
+    description: Toggle announcements for yourself.
+    usage: /announcements
+    permission: coltcore.announcements
+  staffcode:
+    description: Generate a one-time staff action code.
+    usage: /staffcode
+    permission: coltcore.staffmanager
+  promote:
+    description: Promote staff using a one-time code.
+    usage: /promote <player> [rank] <code>
+    permission: coltcore.staffmanager
+  demote:
+    description: Demote staff using a one-time code.
+    usage: /demote <player> <code> [reason]
+    permission: coltcore.staffmanager
+  hire:
+    description: Hire staff/media using a one-time code.
+    usage: /hire <player> [helper|media] <code>
+    permission: coltcore.staffmanager
+  block:
+    description: Toggle blocking a player in chat.
+    usage: /block <player>
+    permission: coltcore.block
+  ignore:
+    description: Toggle blocking a player in chat.
+    usage: /ignore <player>
+    permission: coltcore.block
+  rtpqueue:
+    description: Queue players for one shared RTP drop.
+    usage: /rtpqueue
+    permission: coltcore.rtpqueue
+  billfordtoggle:
+    description: Toggle BillFord set trades.
+    usage: /billfordtoggle
+    permission: gildedbillford.use
+  billfordadmin:
+    description: Manage BillFord set trades.
+    usage: /billfordadmin <open|reload|setcost|setname>
+    permission: gildedbillford.admin
+  playerwipe:
+    description: Owner-only player data wipe UI.
+    usage: /playerwipe <player>
+    permission: coltcore.playerwipe
+  joinmessage:
+    description: Set your custom join message.
+    usage: /joinmessage set <message>|off|preview
+    permission: coltcore.joinmessage
+  ping:
+    description: Show player ping.
+    usage: /ping [player]
+    permission: coltcore.ping
+  deepslatedecoy:
+    description: Seed decoy rotated-deepslate columns to blind base-finders.
+    usage: /deepslatedecoy [radius]
+    permission: coltcore.deepslatedecoy
+  spawnstash:
+    description: Paste a decoy stash schematic to catch x-rayers and griefers.
+    usage: /spawnstash [small|medium|large|<name>] [force] | list
+    permission: coltcore.spawnstash
+  staffmonitor:
+    description: Open the staff audit panel.
+    usage: /staffmonitor [reload]
+    permission: staffmonitor.view
+  staffactivity:
+    description: Staff activity - online vs active vs idle.
+    usage: /staffactivity
+    permission: staffmonitor.view
+  staffafk:
+    description: Staff ranked by total idle time, worst first.
+    usage: /staffafk
+    permission: staffmonitor.view
+  textguard:
+    description: Text guard - offence history, mutes and the escalation ladder.
+    usage: /textguard <status|mutes|unmute|unmuteip|history|test|reload>
+    permission: coltcore.chatguard.admin
+    aliases:
+    - coltguard
+  activerank:
+    description: Playtime progress towards the active rank.
+    usage: /activerank [player] | check|grant|regrant|reload <player>
+    permission: coltcore.activerank
+    aliases:
+    - coltactive
+  staffmacro:
+    description: Staff AFK and macro detection, verified against Grim's simulation.
+    usage: /staffmacro <status|check <player>|reload>
+    permission: coltcore.staffmacro.admin
+  review:
+    description: Human sign-off on automated punishments.
+    usage: /review [approve|deny] <id> | list
+    permission: coltcore.review
+  rewards:
+    description: Claim daily and playtime rewards.
+    usage: /rewards <daily|playtime|claimall|status>
+    aliases: [dailyrewards, playtimerewards]
+    permission: coltcore.rewards
+  redeem:
+    description: Redeem a one-time code. One redemption per IP.
+    usage: /redeem <code>
+    permission: coltcore.redeem
+  redeemcode:
+    description: Manage one-time-per-IP redeem codes.
+    usage: /redeemcode [create|delete|uses|reset|reload]
+    permission: coltcore.redeemcode
+permissions:
+  # ---- Commands that everyone may use -------------------------------------
+  # Named rather than unrestricted. Before this, these seven had no permission
+  # anywhere - not here and not in the handler - so there was no way to take
+  # them away from a muted or abusive player.
+  coltcore.joinalerts:
+    description: Toggle your own join alerts.
+    default: true
+  coltcore.announcements:
+    description: Toggle your own announcement messages.
+    default: true
+  coltcore.block:
+    description: Use /block and /ignore.
+    default: true
+  coltcore.rtpqueue:
+    description: Join the shared RTP queue.
+    default: true
+  coltcore.joinmessage:
+    description: Set your own join message.
+    default: true
+  coltcore.activerank:
+    description: See your own active-rank progress.
+    default: true
+  coltcore.redeem:
+    description: Redeem a code.
+    default: true
+  coltcore.rewards:
+    description: Claim available daily and playtime rewards.
+    default: true
+  # ---- Admin --------------------------------------------------------------
+  coltcore.announce:
+    description: Broadcast a ranked announcement.
+    default: op
+  coltcore.admin.keyall:
+    description: Give every online player crate keys.
+    default: false
+  coltcore.admin.kitall:
+    description: Give every online player a kit.
+    default: false
+  coltcore.admin.shardall:
+    description: Give every online player shards.
+    default: false
+  coltcore.redstone.exempt:
+    description: Redstone here is never throttled.
+    default: op
+  coltcore.staff:
+    description: Treated as staff by the core modules.
+    default: op
+  coltgrim.alerts:
+    description: Receive GrimAC bridge alerts.
+    default: op
+  gildedcreativeguard.bypass:
+    description: Exempt from the creative-mode guard.
+    default: op
+  gildedcreativeguard.notify:
+    description: Receive creative-guard alerts.
+    default: op
+  gildedshield.chatlimit.bypass:
+    description: Exempt from the chat rate limiter.
+    default: op
+  coltcore.redeemcode:
+    default: op
+  coltcore.admin:
+    default: op
+  coltcore.rewards.admin:
+    description: Reload the daily and playtime rewards configuration.
+  coltcore.entitylimit.bypass:
+    description: Exempt from the per-chunk entity cap and the machine-launch refusal.
+    default: false
+  coltcore.staffmanager:
+    default: op
+  coltcore.staffnotify:
+    default: op
+  coltcore.rankgive:
+    default: op
+  coltcore.ping:
+    description: Show your own or another player's ping.
+    default: true
+  gildedbillford.use:
+    default: true
+  gildedbillford.admin:
+    default: op
+  gildedlagguard.admin:
+    default: op
+  gildedlagguard.bypass:
+    default: op
+  cheatdetector.bypass:
+    default: op
+  coltcore.playerwipe:
+    default: op
+  coltcore.deepslatedecoy:
+    default: op
+  coltcore.spawnstash:
+    default: op
+  staffmonitor.view:
+    description: Open the staff monitor GUIs.
+    default: op
+  staffmonitor.admin:
+    description: Use /staffmonitor reload.
+    default: op
+  staffmonitor.tracked:
+    description: Players holding this are recorded. Give it to staff, not everyone.
+    default: false
+  staffmonitor.alerts:
+    description: Receive suspicious-threshold alerts.
+    default: op
+  coltcore.chatguard.bypass:
+    description: Exempt from spam and hate-speech filtering.
+    default: op
+  coltcore.chatguard.alerts:
+    description: See ChatGuard detections.
+    default: op
+  coltcore.chatguard.admin:
+    description: Manage the text guard, mutes and offence history.
+    default: op
+  coltcore.activerank.admin:
+    description: Inspect and force the active-rank grant for other players.
+    default: op
+  coltcore.activerank.exempt:
+    description: Never auto-granted the active rank. Give this to staff and paid ranks.
+    default: false
+  coltcore.staffmacro.admin:
+    description: Use /staffmacro.
+    default: op
+  coltcore.staffmacro.alerts:
+    description: Receive staff AFK/macro flags.
+    default: op
+  coltcore.staffmacro.exempt:
+    description: Never analysed for macro behaviour, whatever the rank.
+    default: false
+  coltbillford.use:
+    default: true
+  coltbillford.admin:
+    default: op
+  coltlagguard.admin:
+    default: op
+  coltlagguard.bypass:
+    default: op
+  coltcore.review:
+    description: Approve or deny automated punishments. Give to admin and above.
+    default: op

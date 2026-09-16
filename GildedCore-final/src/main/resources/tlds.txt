@@ -1,0 +1,53 @@
+# TLDs the guard is allowed to recognise.
+#
+# Deliberately tiny and hand-picked. The shipped list used to be the full IANA
+# set (1,424 single-label entries plus second-levels), and that is what produced
+# "forgot.storage", "update.you" and "v1.makes.like" as advertising hits -
+# .storage, .you and .like are all real delegated TLDs, so any two ordinary
+# words either side of a full stop read as a hostname.
+#
+# A short list is an allowlist and an allowlist can be evaded by registering on
+# a TLD that is not here. That trade was made on purpose: the false positives
+# above were happening in ordinary chat many times a day, and a server being
+# advertised on an unlisted TLD is still caught by the context detector
+# (AdvertContext) and by the IP matcher.
+#
+# One entry per line. A line containing a dot is a second-level suffix.
+
+# Generic
+com
+net
+org
+pro
+fun
+games
+live
+network
+world
+best
+rip
+xyz
+
+# Minecraft-adjacent
+gg
+mc
+
+# Country codes and ccTLD-as-generic
+co
+sh
+io
+si
+uk
+eu
+fr
+fi
+us
+lk
+to
+ge
+nl
+
+# Second-level suffixes, so "play example com br" reads as one address rather
+# than a label followed by two unrelated words.
+com.br
+co.uk

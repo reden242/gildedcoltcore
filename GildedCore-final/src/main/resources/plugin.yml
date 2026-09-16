@@ -1,0 +1,283 @@
+name: GildedCore
+loadbefore:
+- VirtualSpawner
+version: 1.9.1
+main: com.gildedmc.core.GildedCorePlugin
+api-version: '1.21'
+author: GildedMC
+softdepend:
+- GrimAC
+- LiteBans
+- ProtocolLib
+- InteractiveChat
+- Essentials
+- Vault
+- LuckPerms
+- RoseStacker
+depend:
+- WorldEdit
+commands:
+  gildedcore:
+    description: Reload GildedCore.
+    usage: /gildedcore reload
+    permission: gildedcore.admin
+  announce:
+    description: Broadcast a ranked announcement.
+    usage: /announce <message>
+    permission: gildedcore.announce
+  keyall:
+    description: Reward everyone with keys.
+    usage: /keyall <crate> [amount]
+    permission: gildedcore.admin.keyall
+  kitall:
+    description: Reward everyone with a kit.
+    usage: /kitall <kit> [amount]
+    permission: gildedcore.admin.kitall
+  shardall:
+    description: Reward everyone with shards.
+    usage: /shardall <buyer> <purchase text...> <amount>
+    permission: gildedcore.admin.shardall
+  rankgive:
+    description: Give a paid rank from console/admin integrations.
+    usage: /rankgive <player> <rank>
+    permission: gildedcore.rankgive
+  joinalerts:
+    description: Toggle staff/rank join alerts for yourself.
+    usage: /joinalerts
+    permission: gildedcore.joinalerts
+  announcements:
+    description: Toggle announcements for yourself.
+    usage: /announcements
+    permission: gildedcore.announcements
+  staffcode:
+    description: Generate a one-time staff action code.
+    usage: /staffcode
+    permission: gildedcore.staffmanager
+  promote:
+    description: Promote staff using a one-time code.
+    usage: /promote <player> [rank] <code>
+    permission: gildedcore.staffmanager
+  demote:
+    description: Demote staff using a one-time code.
+    usage: /demote <player> <code> [reason]
+    permission: gildedcore.staffmanager
+  hire:
+    description: Hire staff/media using a one-time code.
+    usage: /hire <player> [helper|media] <code>
+    permission: gildedcore.staffmanager
+  block:
+    description: Toggle blocking a player in chat.
+    usage: /block <player>
+    permission: gildedcore.block
+  ignore:
+    description: Toggle blocking a player in chat.
+    usage: /ignore <player>
+    permission: gildedcore.block
+  rtpqueue:
+    description: Queue players for one shared RTP drop.
+    usage: /rtpqueue
+    permission: gildedcore.rtpqueue
+  billfordtoggle:
+    description: Toggle BillFord set trades.
+    usage: /billfordtoggle
+    permission: gildedbillford.use
+  billfordadmin:
+    description: Manage BillFord set trades.
+    usage: /billfordadmin <open|reload|setcost|setname>
+    permission: gildedbillford.admin
+  playerwipe:
+    description: Owner-only player data wipe UI.
+    usage: /playerwipe <player>
+    permission: gildedcore.playerwipe
+  joinmessage:
+    description: Set your custom join message.
+    usage: /joinmessage set <message>|off|preview
+    permission: gildedcore.joinmessage
+  ping:
+    description: Show player ping.
+    usage: /ping [player]
+    permission: gildedcore.ping
+  deepslatedecoy:
+    description: Seed decoy rotated-deepslate columns to blind base-finders.
+    usage: /deepslatedecoy [radius]
+    permission: gildedcore.deepslatedecoy
+  spawnstash:
+    description: Paste a decoy stash schematic to catch x-rayers and griefers.
+    usage: /spawnstash [small|medium|large|<name>] [force] | list
+    permission: gildedcore.spawnstash
+  staffmonitor:
+    description: Open the staff audit panel.
+    usage: /staffmonitor [reload]
+    permission: staffmonitor.view
+  staffactivity:
+    description: Staff activity - online vs active vs idle.
+    usage: /staffactivity
+    permission: staffmonitor.view
+  staffafk:
+    description: Staff ranked by total idle time, worst first.
+    usage: /staffafk
+    permission: staffmonitor.view
+  textguard:
+    description: Text guard - offence history, mutes and the escalation ladder.
+    usage: /textguard <status|mutes|unmute|unmuteip|history|test|reload>
+    permission: gildedcore.chatguard.admin
+    aliases:
+    - gildedguard
+  activerank:
+    description: Playtime progress towards the active rank.
+    usage: /activerank [player] | check|grant|regrant|reload <player>
+    permission: gildedcore.activerank
+    aliases:
+    - gildedactive
+  staffmacro:
+    description: Staff AFK and macro detection, verified against Grim's simulation.
+    usage: /staffmacro <status|check <player>|reload>
+    permission: gildedcore.staffmacro.admin
+  redeem:
+    description: Redeem a one-time code. One redemption per IP.
+    usage: /redeem <code>
+    permission: gildedcore.redeem
+  redeemcode:
+    description: Manage one-time-per-IP redeem codes.
+    usage: /redeemcode [create|delete|uses|reset|reload]
+    permission: gildedcore.redeemcode
+  review:
+    description: Human sign-off on automated punishments.
+    usage: /review [approve|deny] <id> | list
+    permission: gildedcore.review
+  rewards:
+    description: Claim daily and playtime rewards.
+    usage: /rewards <daily|playtime|claimall|status>
+    aliases: [dailyrewards, playtimerewards]
+    permission: gildedcore.rewards
+permissions:
+  # ---- Commands that everyone may use -------------------------------------
+  # Named rather than unrestricted. Before this, these seven had no permission
+  # anywhere - not here and not in the handler - so there was no way to take
+  # them away from a muted or abusive player.
+  gildedcore.joinalerts:
+    description: Toggle your own join alerts.
+    default: true
+  gildedcore.announcements:
+    description: Toggle your own announcement messages.
+    default: true
+  gildedcore.block:
+    description: Use /block and /ignore.
+    default: true
+  gildedcore.rtpqueue:
+    description: Join the shared RTP queue.
+    default: true
+  gildedcore.joinmessage:
+    description: Set your own join message.
+    default: true
+  gildedcore.activerank:
+    description: See your own active-rank progress.
+    default: true
+  gildedcore.redeem:
+    description: Redeem a code.
+    default: true
+  gildedcore.rewards:
+    description: Claim available daily and playtime rewards.
+    default: true
+  # ---- Admin --------------------------------------------------------------
+  gildedcore.announce:
+    description: Broadcast a ranked announcement.
+    default: op
+  gildedcore.admin.keyall:
+    description: Give every online player crate keys.
+    default: false
+  gildedcore.admin.kitall:
+    description: Give every online player a kit.
+    default: false
+  gildedcore.admin.shardall:
+    description: Give every online player shards.
+    default: false
+  gildedcore.redstone.exempt:
+    description: Redstone here is never throttled.
+    default: op
+  gildedcreativeguard.bypass:
+    description: Exempt from the creative-mode guard.
+    default: op
+  gildedcreativeguard.notify:
+    description: Receive creative-guard alerts.
+    default: op
+  gildedgrim.alerts:
+    description: Receive GrimAC bridge alerts.
+    default: op
+  gildedshield.chatlimit.bypass:
+    description: Exempt from the chat rate limiter.
+    default: op
+  gildedcore.redeemcode:
+    default: op
+  gildedcore.rewards.admin:
+    description: Reload the daily and playtime rewards configuration.
+    default: op
+  gildedcore.entitylimit.bypass:
+    description: Exempt from the per-chunk entity cap and the machine-launch refusal.
+    default: false
+  gildedcore.admin:
+    default: op
+  gildedcore.staffmanager:
+    default: op
+  gildedcore.staffnotify:
+    default: op
+  gildedcore.rankgive:
+    default: op
+  gildedcore.ping:
+    description: Show your own or another player's ping.
+    default: true
+  gildedbillford.use:
+    default: true
+  gildedbillford.admin:
+    default: op
+  gildedlagguard.admin:
+    default: op
+  gildedlagguard.bypass:
+    default: op
+  cheatdetector.bypass:
+    default: op
+  gildedcore.playerwipe:
+    default: op
+  gildedcore.deepslatedecoy:
+    default: op
+  gildedcore.spawnstash:
+    default: op
+  staffmonitor.view:
+    description: Open the staff monitor GUIs.
+    default: op
+  staffmonitor.admin:
+    description: Use /staffmonitor reload.
+    default: op
+  staffmonitor.tracked:
+    description: Players holding this are recorded. Give it to staff, not everyone.
+    default: false
+  staffmonitor.alerts:
+    description: Receive suspicious-threshold alerts.
+    default: op
+  gildedcore.chatguard.bypass:
+    description: Exempt from spam and hate-speech filtering.
+    default: op
+  gildedcore.chatguard.alerts:
+    description: See ChatGuard detections.
+    default: op
+  gildedcore.chatguard.admin:
+    description: Manage the text guard, mutes and offence history.
+    default: op
+  gildedcore.activerank.admin:
+    description: Inspect and force the active-rank grant for other players.
+    default: op
+  gildedcore.activerank.exempt:
+    description: Never auto-granted the active rank. Give this to staff and paid ranks.
+    default: false
+  gildedcore.review:
+    description: Approve or deny automated punishments. Give to admin and above.
+    default: op
+  gildedcore.staffmacro.admin:
+    description: Use /staffmacro.
+    default: op
+  gildedcore.staffmacro.alerts:
+    description: Receive staff AFK/macro flags.
+    default: op
+  gildedcore.staffmacro.exempt:
+    description: Never analysed for macro behaviour, whatever the rank.
+    default: false
