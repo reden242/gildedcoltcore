@@ -80,6 +80,26 @@ public final class ContextAwareAntiAd {
     }
 
     /**
+     * False-positive guard: when most of the message's words are cached-benign
+     * from confirmed clean traffic, a block is downgraded to a review. Staff
+     * still see it, but a known-innocent vocabulary can no longer silence a
+     * player on its own. Never upgrades, never passes silently.
+     */
+    private AdVerdict maybeDowngrade(AdVerdict verdict, String normalized) {
+        if (!verdict.block()) return verdict;
+        try {
+            if (pipeline.wordPrior(normalized).benignKnown()) {
+                return AdVerdict.review(verdict.confidence(),
+                        verdict.reason() + " (word-cache benign-known, downgraded)",
+                        verdict.layerScores());
+            }
+        } catch (Throwable ignored) {
+            // The guard must never break a verdict.
+        }
+        return verdict;
+    }
+
+    /**
      * Runs all 5 layers on a chat message and returns the verdict.
      */
     public AdVerdict checkChat(Player player, String raw) {
@@ -162,7 +182,7 @@ public final class ContextAwareAntiAd {
         }
 
         if (shouldBlock) {
-            return AdVerdict.block(combined, reason, scores);
+            return maybeDowngrade(AdVerdict.block(combined, reason, scores), normalized);
         }
         if (shouldReview) {
             return AdVerdict.review(combined, reason, scores);
@@ -207,9 +227,9 @@ public final class ContextAwareAntiAd {
 
         // Signs get instant block if L2 is confident AND player has sign history
         if (l2Score >= L2_BLOCK && (signAddress || signBroken)) {
-            return AdVerdict.block(combined,
+            return maybeDowngrade(AdVerdict.block(combined,
                     "Sign: L2 confident + address sign history (score " + String.format("%.3f", l2Score) + ")",
-                    scores);
+                    scores), normalized);
         }
         if (l2Score >= L2_REVIEW && signAddress) {
             return AdVerdict.review(combined,
@@ -217,7 +237,7 @@ public final class ContextAwareAntiAd {
                     scores);
         }
         if (combined >= 0.75) {
-            return AdVerdict.block(combined, "Sign: combined score " + String.format("%.3f", combined), scores);
+            return maybeDowngrade(AdVerdict.block(combined, "Sign: combined score " + String.format("%.3f", combined), scores), normalized);
         }
         if (combined >= CONTEXT_REVIEW) {
             return AdVerdict.review(combined, "Sign: combined score " + String.format("%.3f", combined), scores);
@@ -261,17 +281,17 @@ public final class ContextAwareAntiAd {
 
         // Books near signs get stricter treatment
         if (nearSign && l2Score >= L2_REVIEW) {
-            return AdVerdict.block(combined,
+            return maybeDowngrade(AdVerdict.block(combined,
                     "Book near sign + L2 borderline (score " + String.format("%.3f", l2Score) + ")",
-                    scores);
+                    scores), normalized);
         }
         if (l2Score >= L2_BLOCK) {
-            return AdVerdict.block(combined,
+            return maybeDowngrade(AdVerdict.block(combined,
                     "L2 confident on book (score " + String.format("%.3f", l2Score) + ")",
-                    scores);
+                    scores), normalized);
         }
         if (combined >= 0.75) {
-            return AdVerdict.block(combined, "Book: combined score " + String.format("%.3f", combined), scores);
+            return maybeDowngrade(AdVerdict.block(combined, "Book: combined score " + String.format("%.3f", combined), scores), normalized);
         }
         if (combined >= CONTEXT_REVIEW) {
             return AdVerdict.review(combined, "Book: combined score " + String.format("%.3f", combined), scores);
@@ -315,12 +335,12 @@ public final class ContextAwareAntiAd {
                 + 0.25 * scores.get("layer5-context");
 
         if (l2Score >= L2_BLOCK && (signAddress || renameScore >= 0.7)) {
-            return AdVerdict.block(combined,
+            return maybeDowngrade(AdVerdict.block(combined,
                     "Rename: L2 confident + context (score " + String.format("%.3f", l2Score) + ")",
-                    scores);
+                    scores), normalized);
         }
         if (combined >= 0.75) {
-            return AdVerdict.block(combined, "Rename: combined score " + String.format("%.3f", combined), scores);
+            return maybeDowngrade(AdVerdict.block(combined, "Rename: combined score " + String.format("%.3f", combined), scores), normalized);
         }
         if (combined >= CONTEXT_REVIEW) {
             return AdVerdict.review(combined, "Rename: combined score " + String.format("%.3f", combined), scores);

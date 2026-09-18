@@ -113,6 +113,15 @@ public final class AntiAdPipeline {
 
     private final Map<UUID, Deque<String>> context = new ConcurrentHashMap<>();
 
+    /**
+     * The neural word-reputation cache: every confirmed outcome teaches it
+     * what individual words mean, and Layer 3 consults it before trusting a
+     * pooled message score. Survives reload - reputations are earned from
+     * live traffic, not from the model file.
+     */
+    private final NeuralWordCache wordCache =
+            new NeuralWordCache(0, NeuralWordCache.DEFAULT_DICT_FRACTION);
+
     private Connection database;                    // antiad.db, may stay null
 
     public AntiAdPipeline(JavaPlugin plugin) {
@@ -144,6 +153,9 @@ public final class AntiAdPipeline {
         this.scanAlways = "always".equalsIgnoreCase(
                 section.getString("l3.scan-mode", "always"));
         this.contextMessages = Math.max(1, section.getInt("l3.context-messages", 5));
+        this.wordCache.resize(this.model == null ? 0 : this.model.vocabWords().size(),
+                section.getDouble("l3.word-cache-fraction",
+                        NeuralWordCache.DEFAULT_DICT_FRACTION));
 
         openDatabase(section.getInt("log.keep-days", 30));
     }
@@ -167,6 +179,33 @@ public final class AntiAdPipeline {
 
     public boolean l2Ready() {
         return this.model != null && this.l2Enabled;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Word-reputation cache                                             */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Teaches the word cache from a blocked message. Call once per block, on
+     * already-normalised text - this is the "after they advertised" half of
+     * Layer 3.
+     */
+    public void confirmAdvert(String normalizedText) {
+        this.wordCache.confirmAdvert(normalizedText);
+    }
+
+    /**
+     * Teaches the word cache from a cleared message. Clears are the more
+     * valuable signal: every false positive the pipeline talks itself out of
+     * becomes words the cache will defend next time.
+     */
+    public void confirmClean(String normalizedText) {
+        this.wordCache.confirmClean(normalizedText);
+    }
+
+    /** The cache's opinion on already-normalised text, for other layers. */
+    public NeuralWordCache.Prior wordPrior(String normalizedText) {
+        return this.wordCache.prior(normalizedText);
     }
 
     /* ------------------------------------------------------------------ */
@@ -236,7 +275,15 @@ public final class AntiAdPipeline {
 
     private ModelVerdict contextualVerdict(UUID playerId, String raw) {
         float message = this.model.probability(raw, MAX_TOKENS);
-        if (message >= BLOCK) {
+        // The cache pulls the pooled score toward the reputation of the
+        // words actually in the message, in proportion to how many are
+        // known. A confident score built mostly from cached-benign words is
+        // how the TPA-auto false positive happened, and this is where it
+        // stops: the adjusted score, not the raw one, faces the rules below.
+        // Unknown vocabulary adjusts nothing, so novel pitches score as before.
+        NeuralWordCache.Prior prior = this.wordCache.prior(raw);
+        float scored = (float) NeuralWordCache.adjust(message, prior);
+        if (scored >= BLOCK) {
             // Flag, not clear. The scan-all caller has not scored this message
             // at all - it arrives here precisely because no cheaper layer found
             // an address - so returning "clear" would mean the one layer that
@@ -244,17 +291,18 @@ public final class AntiAdPipeline {
             // opposite of its job. The band caller did score it, but on the
             // normalised text and below the block threshold, so this is a
             // genuine second reading rather than a duplicate of the first.
-            return new ModelVerdict(true, message, "confident advertising");
+            return new ModelVerdict(true, scored, "confident advertising"
+                    + cacheNote(message, scored, prior));
         }
-        if (message < CLEAR) {
+        if (scored < CLEAR) {
             // Rule 3 only. Everything below is the "does this message continue
             // a pitch" test, and it needs a context to test against.
-            return liftVerdict(playerId, raw, message);
+            return liftVerdict(playerId, raw, scored);
         }
 
         List<String> recent = recentMessages(playerId, raw);
         if (recent.isEmpty()) {
-            return ModelVerdict.clear(message, "borderline, no context");
+            return ModelVerdict.clear(scored, "borderline, no context");
         }
         int adverts = 0;
         float contextTotal = 0F;
@@ -269,12 +317,26 @@ public final class AntiAdPipeline {
             // the confidence reported is the stronger of the two. Reporting the
             // message's own borderline score alone would hand the caller a
             // number too low to act on and waste the evidence that decided it.
-            double confidence = Math.max(message, contextTotal / recent.size());
+            double confidence = Math.max(scored, contextTotal / recent.size());
             return new ModelVerdict(true, confidence,
                     "borderline message in a run of adverts (" + adverts + "/"
                             + recent.size() + ")");
         }
-        return ModelVerdict.clear(message, "borderline in ordinary chat");
+        return ModelVerdict.clear(scored, "borderline in ordinary chat");
+    }
+
+    /**
+     * Names the cache's role when it moved the score across a rule boundary,
+     * so the log shows why a confident model read did or did not flag.
+     */
+    private static String cacheNote(float raw, float scored, NeuralWordCache.Prior prior) {
+        if (prior.known() == 0) return "";
+        boolean crossed = (raw >= BLOCK) != (scored >= BLOCK)
+                || (raw < CLEAR) != (scored < CLEAR);
+        if (!crossed) return "";
+        return String.format(Locale.ROOT,
+                " [word-cache: raw %.2f -> %.2f, %d/%d known, lean %.2f]",
+                raw, scored, prior.known(), prior.total(), prior.advertLean());
     }
 
     /**

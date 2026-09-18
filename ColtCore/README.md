@@ -3,7 +3,7 @@
 Everything measured, with the method next to each number. Where something was
 not measured, or was measured and disappointed, that is said plainly.
 
-Build: `mvn clean package` → `target/ColtCore-1.11.0.jar`. Java 21, Paper 1.21.4.
+Build: `mvn clean package` → `target/ColtCore-1.12.0.jar`. Java 21, Paper 1.21.4.
 
 ---
 

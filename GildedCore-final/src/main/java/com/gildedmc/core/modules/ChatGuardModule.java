@@ -1056,6 +1056,11 @@ public final class ChatGuardModule implements Listener {
             if (this.antiAd != null) {
                 this.antiAd.log(player.getName(), source, raw, evidence,
                         advertisingProbability, null, "pass-l2-clear");
+                try {
+                    this.antiAd.confirmClean(advertForm(raw));
+                } catch (Throwable ignored) {
+                    // Reputation learning must never break a pass.
+                }
             }
             return false;
         }
@@ -1080,6 +1085,11 @@ public final class ChatGuardModule implements Listener {
                         advertisingProbability, verdict.reasoning(), "pass-l3-clear");
                 this.plugin.getLogger().info("[AntiAd] L3 cleared " + player.getName()
                         + " (" + verdict.reasoning() + "): " + raw);
+                try {
+                    this.antiAd.confirmClean(advertForm(raw));
+                } catch (Throwable ignored) {
+                    // Reputation learning must never break a pass.
+                }
                 return false;
             }
             // No opinion (model unavailable): fall through to the aggregator.
@@ -1104,6 +1114,13 @@ public final class ChatGuardModule implements Listener {
         }
         this.plugin.getLogger().info("[LocalAI] L3 cleared " + player.getName()
                 + " (" + context.reason() + "): " + raw);
+        if (this.antiAd != null) {
+            try {
+                this.antiAd.confirmClean(advertForm(raw));
+            } catch (Throwable ignored) {
+                // Reputation learning must never break a pass.
+            }
+        }
         return false;
     }
 
@@ -1126,10 +1143,18 @@ public final class ChatGuardModule implements Listener {
     private boolean blockAdvertising(Player player, String raw, String source,
                                      String evidence, String category,
                                      String reason, double confidence,
-                                     boolean llmConfirmed) {
+                                      boolean llmConfirmed) {
         String trainingLabel = CAT_LIGHT_ADVERT.equals(category)
                 ? LocalAiModule.LABEL_ADVERTISING : category;
         this.local.learn(raw, trainingLabel, "chat-filter-" + reason);
+        // After they advertised: the Layer 3 word cache learns the words.
+        if (this.antiAd != null) {
+            try {
+                this.antiAd.confirmAdvert(advertForm(raw));
+            } catch (Throwable ignored) {
+                // Reputation learning must never break a block.
+            }
+        }
         warn(player, "&cAdvertising other servers is not allowed here.");
         alert("&4" + player.getName() + " &7advertising &f" + evidence
                 + " &7in &f" + source + " &8(&7" + reason + ", "
@@ -1219,6 +1244,13 @@ public final class ChatGuardModule implements Listener {
 
         // Nothing objected to it. Sampled occasionally as a clean example.
         this.local.learnClean(raw);
+        if (this.antiAd != null) {
+            try {
+                this.antiAd.confirmClean(advertForm(raw));
+            } catch (Throwable ignored) {
+                // Reputation learning must never break a pass.
+            }
+        }
         return false;
     }
 
