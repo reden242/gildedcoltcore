@@ -205,12 +205,22 @@ mvn -f GildedCore-final clean package -DskipTests
 
 Built artifacts:
 
-- `ColtCore/target/ColtCore-1.9.1.jar`
-- `GildedCore-final/target/GildedCore-1.9.1.jar`
+- `ColtCore/target/ColtCore-1.9.2.jar`
+- `GildedCore-final/target/GildedCore-1.9.2.jar`
 
-Both jars embed the identical `antiad.ft.bin`. Verify with:
+Both jars embed the identical `antiad.ft.bin` (3.73 MB, sha256
+`e0b18223…f7d9a65`). Verify the loader against the golden vectors:
 
 ```powershell
-java -cp verify-classes com.coltcore.core.modules.FastTextModel ^
+java -cp ColtCore/target/classes com.coltcore.core.modules.FastTextModel `
      antiad/antiad.ft.bin antiad/vectors-check.tsv
+```
+
+Expected tail: `parity: 10 checked, worst delta 0.000000 -> PASS`.
+
+Rare-TLD behaviour in one command:
+
+```powershell
+javac -cp ColtCore/target/classes -d antiad/verify-classes antiad/TldCheck.java
+java -cp "ColtCore/target/classes;antiad/verify-classes" TldCheck antiad/antiad.ft.bin
 ```
