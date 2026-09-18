@@ -63,13 +63,55 @@ public final class ConfigUpdater {
     private ConfigUpdater() { }
 
     /** Bump this whenever a key is added to the bundled config.yml. */
-    public static final int CURRENT_VERSION = 43;
+    public static final int CURRENT_VERSION = 45;
 
     private static final DateTimeFormatter STAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     /** Keys that are structural rather than settings. */
     private static final String VERSION_KEY = "config-version";
+
+    /**
+     * Settings that no longer exist and must not survive a rebuild.
+     *
+     * <p>The carry loop treats any key the template has never heard of as an
+     * owner customisation and faithfully copies it across, which is right for
+     * hand-added settings and wrong for a feature that has been deleted. Left
+     * alone, {@code cheatdetector-loading} would be re-added as "yours" and
+     * would keep regenerating itself in the live file for ever.
+     *
+     * <p>These are struck out after the carry loop, so the template copy is
+     * deleted whether it came from the old template or from the live file.
+     *
+     * <p>{@code anti-ad.llm} is listed as a whole section: the old layer 3 was
+     * an HTTP call to an OpenAI-compatible endpoint, and both layers now run
+     * the classifier in-process, so every key under it is dead. Removing the
+     * section wholesale is also what stops it being left as an empty shell -
+     * an empty section is indistinguishable from the old updater's damage and
+     * would make the file rebuild on every single start.
+     */
+    private static final List<String> REMOVED_KEYS = List.of(
+            "cheatdetector-loading",
+            "anti-ad.llm",
+            "anti-ad.l3.min-call-gap-ms"
+    );
+
+    /**
+     * Settings whose old value names something that no longer exists, mapped to
+     * {old value, new value}.
+     *
+     * <p>Striking a key only helps when the key is gone. {@code
+     * anti-ad.l2.model-resource} still exists - it just used to point at the
+     * fastText binary, and the carry loop would faithfully preserve that value
+     * as the owner's choice. The result would be a live server whose L2 loads
+     * nothing and silently passes every message, which is the one failure mode
+     * that looks exactly like a working filter. So the stale value is migrated
+     * explicitly instead.
+     */
+    private static final java.util.Map<String, String[]> RETIRED_VALUES =
+            java.util.Map.of(
+                    "anti-ad.l2.model-resource", new String[]{"/antiad.ft.bin", "/antiad.m5.bin"}
+            );
 
     /** Runs the rebuild. Returns the number of keys added, or -1 on failure. */
     public static int run(JavaPlugin plugin) {
@@ -112,6 +154,30 @@ public final class ConfigUpdater {
             carried.add(key);
         }
 
+        // Strike out settings for features that no longer exist. This has to run
+        // after the carry loop, which would otherwise have preserved them as
+        // owner customisations and re-added them on every rebuild.
+        List<String> struck = new ArrayList<>();
+        for (String removed : REMOVED_KEYS) {
+            if (template.contains(removed, true) || live.contains(removed, true)) {
+                template.set(removed, null);
+                struck.add(removed);
+            }
+        }
+
+        // Move values that named a file that no longer ships. Same reasoning as
+        // above: the key survives, the value must not.
+        for (java.util.Map.Entry<String, String[]> retired : RETIRED_VALUES.entrySet()) {
+            String path = retired.getKey();
+            String was = retired.getValue()[0];
+            String now = retired.getValue()[1];
+            if (was.equals(template.getString(path))) {
+                template.set(path, now);
+                plugin.getLogger().info("[Config] " + path + ": " + was + " -> " + now
+                        + " (the old file no longer ships)");
+            }
+        }
+
         // Count what the owner is gaining, before the version key masks it.
         int addedKeys = 0;
         for (String key : template.getKeys(true)) {
@@ -136,6 +202,10 @@ public final class ConfigUpdater {
             plugin.getLogger().info("[Config] " + custom.size()
                     + " key(s) of your own are not in the bundled config. Kept:");
             for (String k : custom) plugin.getLogger().info("[Config]   ? " + k);
+        }
+        if (!struck.isEmpty()) {
+            plugin.getLogger().info("[Config] removed " + struck.size()
+                    + " setting(s) for features that no longer exist: " + struck);
         }
         return addedKeys;
     }

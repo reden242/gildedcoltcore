@@ -944,11 +944,11 @@ public final class ChatGuardModule implements Listener {
 
         String evidence = address != null ? address : soft.evidence();
         double patternConfidence = address != null ? 1.0D : soft.heavy() ? 0.60D : 0.50D;
-        // Layer 2: the fastText model first, the legacy LinearModel only as a
+        // Layer 2: the classifier first, the legacy LinearModel only as a
         // fallback when the pipeline is not wired or its model failed to load.
         double advertisingProbability;
-        boolean fromFastText = this.antiAd != null && this.antiAd.l2Ready();
-        if (fromFastText) {
+        boolean fromClassifier = this.antiAd != null && this.antiAd.l2Ready();
+        if (fromClassifier) {
             advertisingProbability = this.antiAd.l2Probability(advertForm(raw));
         } else {
             advertisingProbability = this.local.advertisingProbability(advertForm(raw));
@@ -968,29 +968,29 @@ public final class ChatGuardModule implements Listener {
             return false;
         }
 
-        // Ambiguous band (0.40-0.85): ask the local LLM (millenium-5) for a
-        // second opinion before falling back to the heuristic aggregator. The
-        // LLM call blocks, so it only runs when the fastText model put the
-        // message here - never on clean or confident-flag traffic.
-        if (fromFastText && advertisingProbability >= 0.40D && this.antiAd != null) {
-            AntiAdPipeline.LlmVerdict llm = this.antiAd.llmCheck(
-                    player.getUniqueId(), player.getName(), raw);
-            if (llm.flag() && llm.confidence() >= 0.60D) {
+        // Ambiguous band (0.40-0.85): ask layer 3 whether the message continues
+        // a pitch. It only runs for messages the classifier put here - never on
+        // clean or confident-flag traffic - and, being in-process, it is cheap
+        // enough to run inline wherever the message came from.
+        if (fromClassifier && advertisingProbability >= 0.40D && this.antiAd != null) {
+            AntiAdPipeline.ModelVerdict verdict = this.antiAd.l3Check(
+                    player.getUniqueId(), raw);
+            if (verdict.flag() && verdict.confidence() >= 0.60D) {
                 this.antiAd.log(player.getName(), source, raw, evidence,
-                        advertisingProbability, llm.reasoning(), "flag-llm");
+                        advertisingProbability, verdict.reasoning(), "flag-l3");
                 return blockAdvertising(player, raw, source, evidence,
-                        CAT_ADVERT, "L3 LLM: " + llm.reasoning(),
-                        Math.max(llm.confidence(), advertisingProbability), true);
+                        CAT_ADVERT, "L3: " + verdict.reasoning(),
+                        Math.max(verdict.confidence(), advertisingProbability), true);
             }
-            if (llm.confidence() >= 0.0D) {
-                // The LLM answered and cleared it.
+            if (verdict.confidence() >= 0.0D) {
+                // Layer 3 answered and cleared it.
                 this.antiAd.log(player.getName(), source, raw, evidence,
-                        advertisingProbability, llm.reasoning(), "pass-llm-clear");
-                this.plugin.getLogger().info("[AntiAd] LLM cleared " + player.getName()
-                        + " (" + llm.reasoning() + "): " + raw);
+                        advertisingProbability, verdict.reasoning(), "pass-l3-clear");
+                this.plugin.getLogger().info("[AntiAd] L3 cleared " + player.getName()
+                        + " (" + verdict.reasoning() + "): " + raw);
                 return false;
             }
-            // No opinion (rate limit / error): fall through to the aggregator.
+            // No opinion (model unavailable): fall through to the aggregator.
         }
 
         LocalContextAggregator.Verdict context = this.advertContext.evaluate(
@@ -1103,22 +1103,22 @@ public final class ChatGuardModule implements Listener {
 
         // With no layer-one address signal, the advertising model is not called.
 
-        // Layer 3, scan-all mode: nothing cheaper objected, so the LLM reads
-        // the message on its own merits. This is the only layer that catches a
-        // pitch whose address the regex cannot find and whose shape the
-        // classifier has never seen, which is exactly the obscure-TLD case.
+        // Layer 3, scan-all mode: nothing cheaper objected, so the classifier
+        // reads the message against the player's recent lines. This is the only
+        // layer that can catch a pitch being spread across several messages,
+        // where each fragment is innocuous on its own.
         //
-        // Chat arrives off the main thread, so the blocking call is fine here.
-        // Signs, books and anvils run on the main thread and scanEveryMessage()
-        // refuses to block those, so they cost nothing and stay fail-open.
-        if (this.antiAd != null && this.antiAd.scanModeAlways() && !"anvil".equals(source)) {
-            AntiAdPipeline.LlmVerdict llm = this.antiAd.scanEveryMessage(
-                    p.getUniqueId(), p.getName(), raw);
-            if (llm.flag() && llm.confidence() >= 0.60D) {
+        // It runs in this process on this thread - a handful of forward passes
+        // over a model under 2 MB - so it is cheap enough for the main thread
+        // too, and signs, books and anvil renames get screened like chat.
+        if (this.antiAd != null && this.antiAd.scanModeAlways()) {
+            AntiAdPipeline.ModelVerdict verdict = this.antiAd.l3ScanEveryMessage(
+                    p.getUniqueId(), raw);
+            if (verdict.flag() && verdict.confidence() >= 0.60D) {
                 this.antiAd.log(p.getName(), source, raw, null, -1.0D,
-                        llm.reasoning(), "flag-llm-scan");
-                return blockAdvertising(p, raw, source, "llm scan", CAT_ADVERT,
-                        "L3 LLM scan: " + llm.reasoning(), llm.confidence(), true);
+                        verdict.reasoning(), "flag-model-scan");
+                return blockAdvertising(p, raw, source, "model scan", CAT_ADVERT,
+                        "L3 scan: " + verdict.reasoning(), verdict.confidence(), true);
             }
         }
 

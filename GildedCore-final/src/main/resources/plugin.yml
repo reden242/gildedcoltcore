@@ -1,7 +1,7 @@
 name: GildedCore
 loadbefore:
 - VirtualSpawner
-version: 1.9.1
+version: 1.10.0
 main: com.gildedmc.core.GildedCorePlugin
 api-version: '1.21'
 author: GildedMC
@@ -233,8 +233,6 @@ permissions:
   gildedlagguard.admin:
     default: op
   gildedlagguard.bypass:
-    default: op
-  cheatdetector.bypass:
     default: op
   gildedcore.playerwipe:
     default: op

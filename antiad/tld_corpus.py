@@ -16,7 +16,8 @@ Two halves, and the second half matters more than the first:
                people for mentioning a niche site in passing, which is the
                false positive that gets a filter turned off.
 
-Output: tld_corpus.tsv, label<TAB>text, merged by train_antiad.py.
+Output: tld_corpus.tsv, label<TAB>text, read by TrainMillennium alongside
+seed_corpus.tsv.
 """
 import io
 import pathlib

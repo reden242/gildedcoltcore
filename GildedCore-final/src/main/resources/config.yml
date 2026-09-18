@@ -5,7 +5,7 @@
 # One caveat: deleting a key does not disable it permanently - the next merge
 # will restore it at its default, because a deletion is indistinguishable from
 # a key that was never there. Set it to false or empty instead of deleting it.
-config-version: 40
+config-version: 42
 
 tips:
   enabled: true
@@ -129,11 +129,6 @@ spawn:
   x: 8
   y: 106
   z: 8
-
-cheatdetector-loading:
-  enabled: true
-  seconds: 8
-  message: ""
 
 chat-limiter:
   enabled: true
@@ -1679,43 +1674,27 @@ playtime-rewards:
 # ---------------------------------------------------------------------------
 # ANTI-AD PIPELINE - layers 2 and 3 of the advertising filter.
 #
-# Layer 2 is a fastText-style neural classifier (antiad.ft.bin, ~3.6 MB,
-# trained offline on Common Crawl 300d subword vectors + the server corpus).
-# Layer 3 is a locally hosted LLM, asked for a second opinion only when the
-# classifier is unsure (confidence between 0.40 and 0.85). Both fail OPEN:
-# a missing model or an unreachable LLM means messages pass, never punish.
+# Both layers run the same classifier - the Millennium 5 engine redesigned for
+# text (antiad.m5.bin, 1.8 MB, trained offline on the server corpus) - inside
+# the server process. There is no HTTP call and no second service to keep
+# alive.
+#
+# Layer 2 reads the message on its own. Layer 3 reads it against the player's
+# last few lines, which is the only way to catch a pitch spread across several
+# messages. Both fail OPEN: a missing model means messages pass, never punish.
 anti-ad:
   own-domain: 'gildedmc.net'
   l2:
     enabled: true
-    model-resource: '/antiad.ft.bin'
+    model-resource: '/antiad.m5.bin'
   l3:
     enabled: true
-    # always  the LLM reads EVERY message the regex and L2 cleared, so a pitch
-    #         with no findable address still reaches the one layer that
-    #         understands meaning. Costs one call per player per gap, cached
-    #         per unique line, and skipped on the main thread so signs, books
-    #         and anvils never stall.
-    # band    old behaviour: the LLM only sees messages L2 put in the
-    #         0.40-0.85 ambiguous band.
+    # always  layer 3 reads EVERY message the regex and layer 2 cleared, so a
+    #         pitch split across lines is still caught. It runs in-process, so
+    #         this costs a few forward passes and no network time.
+    # band    layer 3 only sees messages layer 2 put in the 0.40-0.85 band.
     scan-mode: always
-    # One LLM call per player per gap. Everything else falls back to the
-    # heuristic aggregator (or, in scan-all mode, simply passes) instead of
-    # queueing requests.
-    min-call-gap-ms: 10000
+    # How many of the player's previous lines layer 3 is shown.
     context-messages: 5
-  llm:
-    # Any OpenAI-compatible chat completions endpoint. Default is a local
-    # millenium-5 server on loopback - nothing leaves the machine.
-    endpoint: 'http://127.0.0.1:8080/v1/chat/completions'
-    model: 'millenium-5'
-    api-keys: [ 'local' ]
-    timeout-seconds: 8
-    # Scan-all calls get a shorter leash than band calls: they run for every
-    # line, so a hung model must not hold the chat thread for 8 seconds.
-    scan-timeout-seconds: 3
-    # Each in-flight scan parks a chat thread on HTTP. Past this many, further
-    # messages pass unscanned rather than parking more threads.
-    max-concurrent-scans: 4
   log:
     keep-days: 30

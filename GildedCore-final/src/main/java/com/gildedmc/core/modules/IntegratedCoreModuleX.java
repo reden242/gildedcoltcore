@@ -491,13 +491,8 @@ public final class IntegratedCoreModuleX {
         }
 
         private void confirmAndApply(Player player, String targetName, String wipeType) {
-            Player target = Bukkit.getPlayerExact(targetName);
-            if (target != null && GildedCorePlugin.runAfterCheatDetector(target, () -> this.apply(player, targetName, wipeType))) {
-                player.sendMessage("\u00a7eQueued " + wipeType + " wipe for " + targetName + " until client verification finishes.");
-            } else {
-                this.apply(player, targetName, wipeType);
-                player.sendMessage("\u00a7aApplied/queued " + wipeType + " wipe for " + targetName + ".");
-            }
+            this.apply(player, targetName, wipeType);
+            player.sendMessage("\u00a7aApplied/queued " + wipeType + " wipe for " + targetName + ".");
         }
 
         private void apply(CommandSender commandSender, String targetName, String wipeType) {

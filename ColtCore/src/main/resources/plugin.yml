@@ -1,7 +1,7 @@
 name: ColtCore
 loadbefore:
 - VirtualSpawner
-version: 1.9.1
+version: 1.10.0
 main: com.coltcore.core.ColtCorePlugin
 api-version: '1.21'
 author: ColtCore
@@ -235,8 +235,6 @@ permissions:
   gildedlagguard.admin:
     default: op
   gildedlagguard.bypass:
-    default: op
-  cheatdetector.bypass:
     default: op
   coltcore.playerwipe:
     default: op

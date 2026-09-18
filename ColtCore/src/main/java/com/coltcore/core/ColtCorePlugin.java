@@ -70,7 +70,6 @@ import com.coltcore.core.modules.StaffMacroModule;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -85,10 +84,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.HashSet;
-import java.util.logging.Handler;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -204,12 +199,6 @@ implements Listener {
     private RewardsModule rewardsModule;
     private EntityLimitModule entityLimitModule;
     private ConsoleGuard consoleGuard;
-    private final Set<UUID> awaitingCheatDetector = new HashSet<UUID>();
-    private final Map<UUID, Integer> expectedCheatDetectorChecks = new HashMap<UUID, Integer>();
-    private final Set<UUID> cheatDetectorRetried = new HashSet<UUID>();
-    private final Map<UUID, List<Runnable>> afterCheatDetector = new HashMap<UUID, List<Runnable>>();
-    private final Map<UUID, Location> verificationReturnLocations = new HashMap<UUID, Location>();
-    private Handler cheatDetectorLogHandler;
     private JoinPacketIsolation joinPacketIsolation;
 
     public void onEnable() {
@@ -232,7 +221,6 @@ implements Listener {
         IntegratedCoreModuleX.register(this);
         this.joinPacketIsolation = new JoinPacketIsolation(this);
         this.joinPacketIsolation.enable();
-        this.installCheatDetectorLogHandler();
         this.stashModule = new StashModule(this);
         this.stashModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.stashModule, (Plugin)this);
@@ -246,7 +234,7 @@ implements Listener {
         Bukkit.getPluginManager().registerEvents((Listener)this.staffMonitorModule, (Plugin)this);
         this.chatGuardModule = new ChatGuardModule(this);
         this.chatGuardModule.enable();
-        // Anti-ad pipeline: fastText layer 2 + local LLM layer 3.
+        // Anti-ad pipeline: layer 2 and layer 3, both the in-process classifier.
         this.antiAdPipeline = new AntiAdPipeline(this);
         this.chatGuardModule.setAntiAd(this.antiAdPipeline);
         Bukkit.getPluginManager().registerEvents((Listener)this.chatGuardModule, (Plugin)this);
@@ -342,9 +330,6 @@ implements Listener {
     }
 
     public void onDisable() {
-        if (this.cheatDetectorLogHandler != null) {
-            Logger.getLogger("").removeHandler(this.cheatDetectorLogHandler);
-        }
         if (this.joinPacketIsolation != null) this.joinPacketIsolation.disable();
         if (this.tipTask != null) {
             this.tipTask.cancel();
@@ -366,6 +351,7 @@ implements Listener {
         if (this.rewardsModule != null) this.rewardsModule.disable();
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
         if (this.consoleGuard != null) this.consoleGuard.disable();
+        if (this.antiAdPipeline != null) this.antiAdPipeline.disable();
     }
 
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -519,6 +505,10 @@ implements Listener {
         if (args.length == 0) return this.diagnosticsModule.command(sender, args);
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             this.reloadConfig();
+            // Re-read the classifier settings and reopen the log database.
+            // Without this, a model swap or a scan-mode change needs a full
+            // restart and the previous database handle is left open.
+            if (this.antiAdPipeline != null) this.antiAdPipeline.reload();
             this.loadFiles();
             this.chatLimiterModule.reload();
             this.billFordModule.reload();
@@ -1189,14 +1179,7 @@ implements Listener {
 
     private void completeJoin(Player player) {
         if (!player.isOnline()) return;
-        this.awaitingCheatDetector.remove(player.getUniqueId());
-        this.expectedCheatDetectorChecks.remove(player.getUniqueId());
-        this.cheatDetectorRetried.remove(player.getUniqueId());
-        Location returnLocation = this.verificationReturnLocations.remove(player.getUniqueId());
-        if (returnLocation != null && returnLocation.getWorld() != null) player.teleport(returnLocation);
         if (this.joinPacketIsolation != null) this.joinPacketIsolation.unlock(player);
-        List<Runnable> queued = this.afterCheatDetector.remove(player.getUniqueId());
-        if (queued != null) queued.forEach(Runnable::run);
         // Never disclose a vanished player's presence. This suppresses the
         // ordinary broadcast, rank alert and custom /joinmessage alike.
         if (com.coltcore.core.modules.VanishSupport.isVanished(player)) return;
@@ -1218,98 +1201,9 @@ implements Listener {
         }
     }
 
-    @EventHandler(priority=EventPriority.HIGHEST, ignoreCancelled=true)
-    public void onJoinGateMove(PlayerMoveEvent event) {
-        return;
-    }
-
     @EventHandler
     public void onJoinGateQuit(PlayerQuitEvent event) {
-        this.awaitingCheatDetector.remove(event.getPlayer().getUniqueId());
-        this.expectedCheatDetectorChecks.remove(event.getPlayer().getUniqueId());
-        this.cheatDetectorRetried.remove(event.getPlayer().getUniqueId());
-        this.afterCheatDetector.remove(event.getPlayer().getUniqueId());
-        this.verificationReturnLocations.remove(event.getPlayer().getUniqueId());
         if (this.joinPacketIsolation != null) this.joinPacketIsolation.unlock(event.getPlayer());
-    }
-
-    private void installCheatDetectorLogHandler() {
-        this.cheatDetectorLogHandler = new Handler() {
-            public void publish(LogRecord record) {
-                if (record == null || record.getMessage() == null) return;
-                Matcher matcher = Pattern.compile("(?:\\[CheatDetector\\]\\s*)?([^ ]+) (?:passed sign check (\\d+)\\.|sign check (\\d+) timed out\\.)").matcher(record.getMessage());
-                if (!matcher.find()) return;
-                String playerName = matcher.group(1);
-                boolean passed = matcher.group(2) != null;
-                int checkNumber = Integer.parseInt(passed ? matcher.group(2) : matcher.group(3));
-                SchedulerCompat.run(ColtCorePlugin.this, () -> {
-                    Player player = Bukkit.getPlayerExact(playerName);
-                    if (player == null || !awaitingCheatDetector.contains(player.getUniqueId())) return;
-                    int expected = expectedCheatDetectorChecks.getOrDefault(player.getUniqueId(), Integer.MAX_VALUE);
-                    if (checkNumber < expected) return;
-                    if (!passed) {
-                        if (cheatDetectorRetried.add(player.getUniqueId())) {
-                            dispatch("cd check " + player.getName());
-                        } else {
-                            Bukkit.broadcast(ColtCorePlugin.this.colorComponent("&#00ff00CheatDetector &7- &e" + player.getName() + " &7blocked sign verification twice."), "coltgrim.alerts");
-                            completeJoin(player);
-                        }
-                        return;
-                    }
-                    SchedulerCompat.runLater(ColtCorePlugin.this, () -> {
-                        if (player.isOnline() && awaitingCheatDetector.contains(player.getUniqueId())) completeJoin(player);
-                    }, 40L);
-                });
-            }
-            public void flush() {}
-            public void close() {}
-        };
-        Logger.getLogger("").addHandler(this.cheatDetectorLogHandler);
-    }
-
-    private int cheatDetectorCheckCount() {
-        Plugin detector = Bukkit.getPluginManager().getPlugin("CheatDetector");
-        if (detector == null || !detector.isEnabled()) return 0;
-        File configFile = new File(detector.getDataFolder(), "config.yml");
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(configFile);
-        if (!config.getBoolean("checks.sign-checks", true)) return 0;
-        List<?> raw = config.getList("sign-probe.keys");
-        if (raw == null) return 0;
-        int valid = 0;
-        for (Object entry : raw) {
-            if (!(entry instanceof Map<?, ?> map)) continue;
-            if (map.get("translation") != null && map.get("mod") != null) valid++;
-        }
-        return (valid + 3) / 4;
-    }
-
-    private boolean cheatDetectorExempts(Player player) {
-        Plugin detector = Bukkit.getPluginManager().getPlugin("CheatDetector");
-        if (detector == null || !detector.isEnabled()) return true;
-        try {
-            Method exempt = detector.getClass().getDeclaredMethod("isExempt", Player.class);
-            exempt.setAccessible(true);
-            if (Boolean.TRUE.equals(exempt.invoke(detector, player))) return true;
-            Method bedrock = detector.getClass().getDeclaredMethod("isBedrockPlayer", Player.class);
-            bedrock.setAccessible(true);
-            return Boolean.TRUE.equals(bedrock.invoke(detector, player));
-        } catch (ReflectiveOperationException ignored) {
-            return player.hasPermission("cheatdetector.bypass") || player.isOp();
-        }
-    }
-
-    public static boolean runAfterCheatDetector(Player player, Runnable action) {
-        ColtCorePlugin instance = JavaPlugin.getPlugin(ColtCorePlugin.class);
-        if (!instance.awaitingCheatDetector.contains(player.getUniqueId())) return false;
-        instance.afterCheatDetector.computeIfAbsent(player.getUniqueId(), ignored -> new ArrayList<Runnable>()).add(action);
-        return true;
-    }
-
-    private World verificationWorld(World current) {
-        for (World world : Bukkit.getWorlds()) {
-            if (!world.getUID().equals(current.getUID()) && world.getEnvironment() != current.getEnvironment()) return world;
-        }
-        return Bukkit.getWorlds().stream().filter(world -> !world.getUID().equals(current.getUID())).findFirst().orElse(null);
     }
 
     @EventHandler(priority=EventPriority.HIGHEST)

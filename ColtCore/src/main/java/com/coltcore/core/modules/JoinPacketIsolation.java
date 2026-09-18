@@ -112,7 +112,8 @@ public final class JoinPacketIsolation {
     private Set<PacketType> terrainPacketTypes() {
         Set<PacketType> types = new LinkedHashSet<>();
         // Keep the native loading screen open by withholding final position sync.
-        // Chunk and light data must reach the client so CheatDetector's phantom sign can respond.
+        // Chunk and light data still reach the client so the world is rendered
+        // behind the loading screen rather than popping in after it closes.
         addServer(types, "POSITION", "UNLOAD_CHUNK", "VIEW_CENTRE", "VIEW_DISTANCE");
         return types;
     }

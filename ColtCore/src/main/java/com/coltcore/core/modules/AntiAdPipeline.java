@@ -1,17 +1,9 @@
 package com.coltcore.core.modules;
 
 import com.coltcore.core.SchedulerCompat;
-import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -19,6 +11,7 @@ import java.sql.Statement;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -26,88 +19,104 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The anti-advertising pipeline: layer 2 (the fastText-style classifier) and
- * layer 3 (the local LLM) behind one front door used by
+ * The anti-advertising pipeline: layer 2 (the message classifier) and layer 3
+ * (the same classifier reading the conversation) behind one front door used by
  * {@link ChatGuardModule#screenAdvertising}.
  *
- * <h2>Layer 2 - a real classifier, trained on real vectors</h2>
- * {@code antiad.ft.bin} is a fastText-architecture model: char 3-6-gram subword
- * embeddings initialised from Common Crawl 300d vectors (PCA-reduced to 100d),
- * mean-pooled into a softmax over advertising/clean. Trained offline by
- * {@code antiad/train_antiad.py} against 32k samples of seed ads, mutated
- * obfuscations and real server chat; shipped quantized at ~3.6 MB. Java-side
- * loading and the hash contract live in {@link FastTextModel}.
+ * <h2>One model, two views</h2>
+ * Both layers run {@link MillenniumNet} - the text redesign of the Millennium 5
+ * engine - and both run it in this process on the plugin's own thread. There is
+ * no HTTP call, no separate service to keep alive, and nothing to time out. The
+ * layers differ only in what they are shown:
  *
- * <h2>Layer 3 - the local LLM</h2>
- * The message and its recent context go to a locally-hosted OpenAI-compatible
- * endpoint (default {@code http://127.0.0.1:8080/v1/chat/completions}, model
- * {@code millenium-5}). The LLM answers strict JSON; anything else - timeout,
- * refusal, unparseable, rate limit (one call per player per 10 s) - is treated
- * as "no opinion" and the message passes.
+ * <ul>
+ *   <li><b>L2</b> sees the message alone, truncated to its last
+ *       {@value #MAX_TOKENS} tokens. It answers "is this text an advert?"</li>
+ *   <li><b>L3</b> sees the message plus the player's last
+ *       {@code l3.context-messages} lines, each scored separately. It answers
+ *       the question L2 structurally cannot: "is this message part of an
+ *       advertising pitch being spread across several lines?"</li>
+ * </ul>
  *
- * <p>Two entry points share one implementation. {@link #llmCheck} is the
- * tiebreaker used when L2 lands in the ambiguous band (0.40-0.85).
- * {@link #scanEveryMessage} is the scanner: with {@code l3.scan-mode: always}
- * it reads every message the regex and L2 <em>cleared</em>, which is the only
- * way a pitch with no findable address - an obscure TLD, a bare server name -
- * gets judged on meaning. It never blocks the server tick: the main-thread
- * guard returns "no opinion" for signs, books and anvils, and repeated lines
- * hit the verdict cache instead of the model.
+ * <h2>Why L3 does not simply concatenate</h2>
+ * The obvious design - feed {@code context + message} as one sequence - was
+ * built, measured and discarded. With five context lines (about twenty tokens)
+ * against a three-token reply, the context wins the pooled representation, and
+ * it fails in both directions: an innocent "ok" following five advertising
+ * lines scored 0.804 (a false accusation), while a real pitch, "wanna join my
+ * smp? ip in bio", fell from 0.741 to 0.183 when it followed ordinary chat (a
+ * miss). So L3 is message-anchored instead, and the context has to earn its
+ * influence:
+ *
+ * <ol>
+ *   <li>The message alone is confident (&ge; {@value #BLOCK}) - flag. Note that
+ *       this is <em>not</em> a restatement of L2's answer: the band caller scores
+ *       the normalised text and the scan-all caller does not score at all, so a
+ *       confident score here is a second, independent reading.</li>
+ *   <li>The message alone is borderline (&ge; {@value #CLEAR}, &lt;
+ *       {@value #BLOCK}) <em>and</em> at least half the context lines are
+ *       themselves confident adverts - flag. An oddity in isolation is not
+ *       worth acting on; the same oddity in a run of adverts is a pitch.</li>
+ *   <li>Otherwise, flag only if appending the message <em>raises</em> the
+ *       advertising score of what precedes it. Requiring the score to rise,
+ *       rather than to be high, is what protects the innocent reply: the
+ *       advertising context already scores high and the reply does not lift it.
+ *       A pitch split across lines lifts it sharply, and that is the case no
+ *       single-message classifier can see.</li>
+ * </ol>
+ *
+ * <p>Every threshold here was set from the held-out split, not by taste; the
+ * measurements are reproduced by {@code TrainMillennium eval}.
+ *
+ * <p>Fail-open by construction: a missing or unreadable model disables the
+ * layer and the message passes. Nothing in this class can punish on a failure.
  */
 public final class AntiAdPipeline {
 
-    /** LLM answer, or a "no opinion" that the caller must treat as pass. */
-    record LlmVerdict(boolean flag, double confidence, String reasoning) {
-        static LlmVerdict noOpinion(String why) {
-            return new LlmVerdict(false, -1.0D, why);
+    /** A layer-3 answer, or a "no opinion" that the caller must treat as pass. */
+    record ModelVerdict(boolean flag, double confidence, String reasoning) {
+        static ModelVerdict noOpinion(String why) {
+            return new ModelVerdict(false, -1.0D, why);
+        }
+
+        /** An opinion that the message should pass, with the model's own score. */
+        static ModelVerdict clear(double confidence, String why) {
+            return new ModelVerdict(false, confidence, why);
         }
     }
 
+    /** p(advertising) at or above this blocks without asking L3. */
+    private static final double BLOCK = 0.85D;
+    /** p(advertising) at or below this clears without asking L3. */
+    private static final double CLEAR = 0.40D;
+    /** Fraction of context lines that must be confident adverts for rule 2. */
+    private static final double CONTEXT_AD_SHARE = 0.5D;
+    /** Score the message must add to its context for rule 3 to fire. */
+    private static final float CONTEXT_LIFT = 0.35F;
+    /**
+     * Floor on the combined score for rule 3, set to the same bar the message
+     * alone has to clear. Requiring the two to agree means a borderline window
+     * is never enough on its own, so an ordinary reply that happens to lift an
+     * ordinary conversation cannot be flagged by arithmetic alone.
+     */
+    private static final float CONTEXT_LIFT_FLOOR = 0.85F;
+    /** Tokens per scored sequence - the message, and each context line. */
+    static final int MAX_TOKENS = 24;
+
     private final JavaPlugin plugin;
-    private final String ownDomain;
 
-    private FastTextModel model;                    // layer 2, null = unavailable
+    private MillenniumNet model;                    // null = unavailable
     private boolean l2Enabled = true;
-
-    // layer 3
     private boolean l3Enabled = true;
-    private String llmEndpoint = "http://127.0.0.1:8080/v1/chat/completions";
-    private String llmModel = "millenium-5";
-    private String llmKey = "local";
-    private int llmTimeoutSeconds = 8;
-    private long l3MinCallGapMs = 10_000L;
-
-    private final Map<UUID, Long> lastLlmCall = new ConcurrentHashMap<>();
-    private final Map<UUID, Deque<String>> context = new ConcurrentHashMap<>();
-    private static final int CONTEXT_MESSAGES = 5;
-
-    /**
-     * Verdict cache keyed by text hash. The same line ("gg", a copypasta, a
-     * repeated spam post) is not sent to the model twice, which is what makes
-     * scanning every message affordable.
-     */
-    private final Map<Integer, LlmVerdict> verdictCache = new ConcurrentHashMap<>();
-    private static final int CACHE_MAX = 4096;
-
-    // layer 3 scan policy
     private boolean scanAlways = true;
-    private int scanTimeoutSeconds = 3;
-    private int maxConcurrentScans = 4;
+    private int contextMessages = 5;
 
-    /**
-     * Scan-all calls in flight. Each one parks an async chat thread on HTTP for
-     * up to {@code scan-timeout-seconds}, so when the model is slow the cap is
-     * what stops a busy server from parking every chat thread it has. Over the
-     * cap the message simply passes unscanned, like any other fail-open path.
-     */
-    private final java.util.concurrent.atomic.AtomicInteger scansInFlight =
-            new java.util.concurrent.atomic.AtomicInteger();
+    private final Map<UUID, Deque<String>> context = new ConcurrentHashMap<>();
 
     private Connection database;                    // antiad.db, may stay null
 
     public AntiAdPipeline(JavaPlugin plugin) {
         this.plugin = plugin;
-        this.ownDomain = plugin.getConfig().getString("anti-ad.own-domain", "coltcore.net");
         reload();
     }
 
@@ -117,30 +126,24 @@ public final class AntiAdPipeline {
         if (section == null) section = this.plugin.getConfig().createSection("anti-ad");
 
         this.l2Enabled = section.getBoolean("l2.enabled", true);
-        String resource = section.getString("l2.model-resource", "/antiad.ft.bin");
-        this.model = this.l2Enabled ? FastTextModel.loadResource(resource) : null;
-        if (this.l2Enabled && this.model == null) {
-            this.plugin.getLogger().warning("[AntiAd] layer 2 model " + resource
-                    + " missing or unreadable - L2 disabled, fail-open.");
-        } else if (this.model != null) {
-            this.plugin.getLogger().info("[AntiAd] layer 2 model loaded ("
-                    + String.join("/", this.model.labels()) + ").");
+        String resource = section.getString("l2.model-resource", "/antiad.m5.bin");
+        this.model = this.l2Enabled || section.getBoolean("l3.enabled", true)
+                ? MillenniumNet.loadResource(resource) : null;
+        if (this.model == null) {
+            this.plugin.getLogger().warning("[AntiAd] classifier " + resource
+                    + " missing or unreadable - L2 and L3 disabled, fail-open.");
+        } else {
+            this.plugin.getLogger().info("[AntiAd] classifier loaded: "
+                    + this.model.parameters() + " parameters, "
+                    + String.format(Locale.ROOT, "%.2f MB",
+                    this.model.serialisedBytes() / 1048576.0D)
+                    + ", " + this.model.vocabWords().size() + " words.");
         }
 
         this.l3Enabled = section.getBoolean("l3.enabled", true);
         this.scanAlways = "always".equalsIgnoreCase(
                 section.getString("l3.scan-mode", "always"));
-        ConfigurationSection llm = section.getConfigurationSection("llm");
-        if (llm != null) {
-            this.llmEndpoint = llm.getString("endpoint", this.llmEndpoint);
-            this.llmModel = llm.getString("model", this.llmModel);
-            List<String> keys = llm.getStringList("api-keys");
-            if (!keys.isEmpty()) this.llmKey = keys.get(0);
-            this.llmTimeoutSeconds = llm.getInt("timeout-seconds", 8);
-            this.scanTimeoutSeconds = llm.getInt("scan-timeout-seconds", 3);
-            this.maxConcurrentScans = Math.max(1, llm.getInt("max-concurrent-scans", 4));
-        }
-        this.l3MinCallGapMs = section.getLong("l3.min-call-gap-ms", 10_000L);
+        this.contextMessages = Math.max(1, section.getInt("l3.context-messages", 5));
 
         openDatabase(section.getInt("log.keep-days", 30));
     }
@@ -150,198 +153,167 @@ public final class AntiAdPipeline {
     /* ------------------------------------------------------------------ */
 
     /**
-     * p(advertising) from the fastText model on the ALREADY NORMALIZED text,
-     * or -1 when the model is unavailable (caller falls back to the old
-     * LinearModel or passes).
+     * p(advertising) on the ALREADY NORMALIZED text, or -1 when the model is
+     * unavailable (the caller falls back to the heuristic aggregator).
      */
     public double l2Probability(String normalizedText) {
-        if (this.model == null) return -1.0D;
+        if (this.model == null || !this.l2Enabled) return -1.0D;
         try {
-            return this.model.advertisingProbability(normalizedText);
+            return this.model.probability(normalizedText, MAX_TOKENS);
         } catch (Throwable t) {
             return -1.0D;
         }
     }
 
     public boolean l2Ready() {
-        return this.model != null;
+        return this.model != null && this.l2Enabled;
     }
 
     /* ------------------------------------------------------------------ */
     /*  Layer 3                                                           */
     /* ------------------------------------------------------------------ */
 
-    /** Feeds the L3 context window. Called for every message, all players. */
+    /** Feeds the context window. Called for every message, all players. */
     public void record(UUID playerId, String text) {
         if (text == null || text.isBlank()) return;
-        Deque<String> entries = this.context.computeIfAbsent(playerId, ignored -> new ArrayDeque<>());
+        Deque<String> entries = this.context.computeIfAbsent(playerId,
+                ignored -> new ArrayDeque<>());
         synchronized (entries) {
             entries.addLast(text.length() > 300 ? text.substring(0, 300) : text);
-            while (entries.size() > CONTEXT_MESSAGES) entries.removeFirst();
+            while (entries.size() > this.contextMessages) entries.removeFirst();
         }
     }
 
-    /** Drops a player's context and rate-limit stamp. */
+    /** Drops a player's context. */
     public void clear(UUID playerId) {
         this.context.remove(playerId);
-        this.lastLlmCall.remove(playerId);
     }
 
     /**
-     * Asks the local LLM for a second opinion. Rate-limited per player and
-     * fail-open by construction: every failure mode returns "no opinion".
-     * MUST be called off the main thread (it blocks on HTTP).
+     * L3 as the tiebreaker for a message L2 put in the ambiguous band, or as the
+     * fallback when L2 is unavailable.
+     *
+     * <p>Cheap and non-blocking: three to seven forward passes over at most
+     * {@value #MAX_TOKENS} tokens each, on an in-process model. Safe to call
+     * from the main thread, which is why signs, books and anvil renames are
+     * screened like any other surface now.
      */
-    public LlmVerdict llmCheck(UUID playerId, String playerName, String raw) {
-        return llmVerdict(playerId, playerName, raw, this.llmTimeoutSeconds);
+    public ModelVerdict l3Check(UUID playerId, String raw) {
+        return verdict(playerId, raw);
     }
 
     /**
-     * The LLM as a first-class scanner rather than a tiebreaker.
-     *
-     * <p>Called for messages the regex and the classifier did <em>not</em>
-     * flag, so the layer that can read meaning gets to look at traffic the
-     * cheaper layers cleared. Two things keep that affordable: the per-player
-     * rate limit (one call per {@code l3.min-call-gap-ms}), and a verdict
-     * cache, so a repeated line costs nothing after the first look.
-     *
-     * <p>Only callable off the main thread. On the main thread the caller must
-     * not block, so this returns "no opinion" immediately - the message is
-     * recorded for context instead and the next scanned line benefits.
+     * L3 as a scanner over traffic the regex and L2 cleared. The contextual
+     * rules are the whole point here: a message that looks innocent alone but
+     * continues a pitch is invisible to L2 and is exactly what this catches.
      */
-    public LlmVerdict scanEveryMessage(UUID playerId, String playerName, String raw) {
-        if (!this.scanAlways) return LlmVerdict.noOpinion("scan-always off");
-        if (Bukkit.isPrimaryThread()) return LlmVerdict.noOpinion("main thread");
-        String key = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
-        if (this.verdictCache.containsKey(key.hashCode())) {
-            return llmVerdict(playerId, playerName, raw, this.scanTimeoutSeconds);
-        }
-        if (this.scansInFlight.get() >= this.maxConcurrentScans) {
-            return LlmVerdict.noOpinion("scan backlog");
-        }
-        this.scansInFlight.incrementAndGet();
-        try {
-            return llmVerdict(playerId, playerName, raw, this.scanTimeoutSeconds);
-        } finally {
-            this.scansInFlight.decrementAndGet();
-        }
+    public ModelVerdict l3ScanEveryMessage(UUID playerId, String raw) {
+        if (!this.scanAlways) return ModelVerdict.noOpinion("scan-always off");
+        return verdict(playerId, raw);
     }
 
-    /** Whether the LLM scans every message, not just the ambiguous band. */
+    /** Whether L3 reads every message, not just the ambiguous band. */
     public boolean scanModeAlways() {
-        return this.scanAlways && this.l3Enabled;
+        return this.scanAlways && l3Ready();
     }
 
-    private LlmVerdict llmVerdict(UUID playerId, String playerName, String raw,
-                                  int timeoutSeconds) {
-        if (!this.l3Enabled) return LlmVerdict.noOpinion("l3 disabled");
+    public boolean l3Ready() {
+        return this.model != null && this.l3Enabled;
+    }
 
-        String key = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
-        int hash = key.hashCode();
-        LlmVerdict cached = this.verdictCache.get(hash);
-        if (cached != null) return cached;
-
-        Long last = this.lastLlmCall.get(playerId);
-        long now = System.currentTimeMillis();
-        if (last != null && now - last < this.l3MinCallGapMs) {
-            return LlmVerdict.noOpinion("rate-limited");
+    private ModelVerdict verdict(UUID playerId, String raw) {
+        if (!l3Ready()) return ModelVerdict.noOpinion("l3 disabled");
+        if (raw == null || raw.isBlank()) return ModelVerdict.noOpinion("empty");
+        try {
+            return contextualVerdict(playerId, raw);
+        } catch (Throwable t) {
+            // A classifier that throws must never be the reason someone is
+            // punished, so the failure is reported as "no opinion".
+            this.plugin.getLogger().warning("[AntiAd] L3 failed, fail-open: " + t.getMessage());
+            return ModelVerdict.noOpinion("error");
         }
-        this.lastLlmCall.put(playerId, now);
+    }
 
+    private ModelVerdict contextualVerdict(UUID playerId, String raw) {
+        float message = this.model.probability(raw, MAX_TOKENS);
+        if (message >= BLOCK) {
+            // Flag, not clear. The scan-all caller has not scored this message
+            // at all - it arrives here precisely because no cheaper layer found
+            // an address - so returning "clear" would mean the one layer that
+            // reads every message could never block anything, which is the
+            // opposite of its job. The band caller did score it, but on the
+            // normalised text and below the block threshold, so this is a
+            // genuine second reading rather than a duplicate of the first.
+            return new ModelVerdict(true, message, "confident advertising");
+        }
+        if (message < CLEAR) {
+            // Rule 3 only. Everything below is the "does this message continue
+            // a pitch" test, and it needs a context to test against.
+            return liftVerdict(playerId, raw, message);
+        }
+
+        List<String> recent = recentMessages(playerId, raw);
+        if (recent.isEmpty()) {
+            return ModelVerdict.clear(message, "borderline, no context");
+        }
+        int adverts = 0;
+        float contextTotal = 0F;
+        for (String line : recent) {
+            float score = this.model.probability(line, MAX_TOKENS);
+            contextTotal += score;
+            if (score >= BLOCK) adverts++;
+        }
+        double share = (double) adverts / recent.size();
+        if (share >= CONTEXT_AD_SHARE) {
+            // The verdict is backed by the context as well as the message, so
+            // the confidence reported is the stronger of the two. Reporting the
+            // message's own borderline score alone would hand the caller a
+            // number too low to act on and waste the evidence that decided it.
+            double confidence = Math.max(message, contextTotal / recent.size());
+            return new ModelVerdict(true, confidence,
+                    "borderline message in a run of adverts (" + adverts + "/"
+                            + recent.size() + ")");
+        }
+        return ModelVerdict.clear(message, "borderline in ordinary chat");
+    }
+
+    /**
+     * Rule 3: does the message raise the advertising score of what precedes it?
+     *
+     * <p>Both scores are of the same window, so anything the context contributes
+     * is present in each and cancels. What is left is the message's own
+     * contribution - which is the only thing worth acting on when the message by
+     * itself reads as innocent.
+     */
+    private ModelVerdict liftVerdict(UUID playerId, String raw, float messageScore) {
+        List<String> recent = recentMessages(playerId, raw);
+        if (recent.isEmpty()) return ModelVerdict.clear(messageScore, "no context");
+        StringBuilder joined = new StringBuilder();
+        for (String line : recent) {
+            if (joined.length() > 0) joined.append(' ');
+            joined.append(line);
+        }
+        float contextOnly = this.model.probability(joined.toString(), MAX_TOKENS * 3);
+        float withMessage = this.model.probability(joined + " " + raw, MAX_TOKENS * 3);
+        float lift = withMessage - contextOnly;
+        if (lift >= CONTEXT_LIFT && withMessage >= CONTEXT_LIFT_FLOOR) {
+            return new ModelVerdict(true, withMessage,
+                    String.format(Locale.ROOT,
+                            "continues a pitch (score %+.2f to %.2f)", lift, withMessage));
+        }
+        return ModelVerdict.clear(messageScore, "no lift from context");
+    }
+
+    private List<String> recentMessages(UUID playerId, String raw) {
         List<String> recent = new ArrayList<>();
         Deque<String> entries = this.context.get(playerId);
-        if (entries != null) {
-            synchronized (entries) { recent.addAll(entries); }
-        }
-        String body = buildRequest(playerName, raw, recent);
-        try {
-            String response = post(body, timeoutSeconds);
-            LlmVerdict verdict = parseVerdict(response);
-            if (verdict.confidence() >= 0.0D) {
-                if (this.verdictCache.size() > CACHE_MAX) this.verdictCache.clear();
-                this.verdictCache.put(hash, verdict);
+        if (entries == null) return recent;
+        synchronized (entries) {
+            for (String line : entries) {
+                if (!line.equals(raw)) recent.add(line);
             }
-            return verdict;
-        } catch (Throwable t) {
-            this.plugin.getLogger().warning("[AntiAd] LLM unavailable, fail-open: " + t.getMessage());
-            return LlmVerdict.noOpinion("error");
         }
-    }
-
-    private String buildRequest(String playerName, String raw, List<String> recent) {
-        StringBuilder history = new StringBuilder();
-        for (String line : recent) {
-            if (line.equals(raw)) continue;
-            if (history.length() > 0) history.append("\\n");
-            history.append(escape(line));
-        }
-        String system = "You are a Minecraft server chat moderator. Decide whether the message"
-                + " advertises or promotes another server, IP address, or Discord invite."
-                + " Benign mentions of well-known websites (reddit.com, youtube.com, github.com)"
-                + " are NOT advertising. Answer with strict JSON only:"
-                + " {\\\"flag\\\": true|false, \\\"confidence\\\": 0.0-1.0, \\\"reasoning\\\": \\\"short reason\\\"}";
-        String user = "Player: " + playerName + "\\nRecent messages from the same player:\\n"
-                + history + "\\nMessage to judge: \\\"" + escape(raw) + "\\\"";
-        return "{\"model\": \"" + this.llmModel + "\", \"temperature\": 0.0,"
-                + " \"messages\": ["
-                + "{\"role\": \"system\", \"content\": \"" + system + "\"},"
-                + "{\"role\": \"user\", \"content\": \"" + user + "\"}"
-                + "]}";
-    }
-
-    private static String escape(String text) {
-        return text.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
-    private String post(String json, int timeoutSeconds) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(this.llmEndpoint).openConnection();
-        connection.setRequestMethod("POST");
-        connection.setRequestProperty("Content-Type", "application/json");
-        connection.setRequestProperty("Authorization", "Bearer " + this.llmKey);
-        connection.setConnectTimeout(2_000);
-        connection.setReadTimeout(Math.max(1, timeoutSeconds) * 1_000);
-        connection.setDoOutput(true);
-        try (OutputStream out = connection.getOutputStream()) {
-            out.write(json.getBytes(StandardCharsets.UTF_8));
-        }
-        int status = connection.getResponseCode();
-        InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] chunk = new byte[4096];
-        int read;
-        while (stream != null && (read = stream.read(chunk)) >= 0) buffer.write(chunk, 0, read);
-        if (status >= 400) throw new IllegalStateException("HTTP " + status);
-        return buffer.toString(StandardCharsets.UTF_8);
-    }
-
-    private LlmVerdict parseVerdict(String response) {
-        String content = extractContent(response);
-        if (content == null) return LlmVerdict.noOpinion("no content");
-        int start = content.indexOf('{');
-        int end = content.lastIndexOf('}');
-        if (start < 0 || end <= start) return LlmVerdict.noOpinion("no json");
-        String json = content.substring(start, end + 1);
-        boolean flag = json.matches("(?s).*\"flag\"\\s*:\\s*true.*");
-        String confRaw = regexGroup(json, "\"confidence\"\\s*:\\s*([0-9.]+)");
-        double confidence = 0.5D;
-        try {
-            if (confRaw != null) confidence = Double.parseDouble(confRaw);
-        } catch (NumberFormatException ignored) { }
-        String reasoning = regexGroup(json, "\"reasoning\"\\s*:\\s*\"([^\"]*)\"");
-        return new LlmVerdict(flag, Math.max(0.0D, Math.min(1.0D, confidence)),
-                reasoning == null ? "llm" : reasoning);
-    }
-
-    /** content field of an OpenAI-style chat completion response. */
-    private static String extractContent(String response) {
-        String content = regexGroup(response, "(?s)\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
-        if (content == null) return null;
-        return content.replace("\\\"", "\"").replace("\\\\", "\\").replace("\\n", "\n");
-    }
-
-    private static String regexGroup(String input, String pattern) {
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile(pattern).matcher(input);
-        return m.find() ? m.group(1) : null;
+        return recent;
     }
 
     /* ------------------------------------------------------------------ */
@@ -368,15 +340,33 @@ public final class AntiAdPipeline {
                         + "ts INTEGER NOT NULL)");
                 statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_antiad_ts ON antiad_log(ts)");
             }
+            prune(keepDays);
         } catch (Throwable t) {
             this.plugin.getLogger().warning("[AntiAd] log database unavailable: " + t.getMessage());
             this.database = null;
         }
     }
 
+    /**
+     * Drops log rows past the retention window. The column is still called
+     * {@code llm} because it is the same column existing databases already have;
+     * it now holds the L3 reason rather than a language model's answer.
+     */
+    private void prune(int keepDays) {
+        if (this.database == null || keepDays <= 0) return;
+        long cutoff = System.currentTimeMillis() - (long) keepDays * 86_400_000L;
+        try (PreparedStatement statement = this.database.prepareStatement(
+                "DELETE FROM antiad_log WHERE ts < ?")) {
+            statement.setLong(1, cutoff);
+            statement.executeUpdate();
+        } catch (Throwable ignored) {
+            // Retention is housekeeping; never let it break startup.
+        }
+    }
+
     /** Async log write; never throws, never blocks the caller. */
     public void log(String playerName, String surface, String raw,
-                    String l1, double l2, String llm, String action) {
+                    String l1, double l2, String l3, String action) {
         if (this.database == null) return;
         final Connection db = this.database;
         SchedulerCompat.runAsync(this.plugin, () -> {
@@ -388,7 +378,7 @@ public final class AntiAdPipeline {
                 statement.setString(3, raw);
                 statement.setString(4, l1);
                 statement.setDouble(5, l2);
-                statement.setString(6, llm);
+                statement.setString(6, l3);
                 statement.setString(7, action);
                 statement.setLong(8, System.currentTimeMillis());
                 statement.executeUpdate();
@@ -403,5 +393,6 @@ public final class AntiAdPipeline {
             try { this.database.close(); } catch (Throwable ignored) { }
             this.database = null;
         }
+        this.context.clear();
     }
 }
