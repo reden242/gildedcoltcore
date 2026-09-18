@@ -5,7 +5,7 @@
 # One caveat: deleting a key does not disable it permanently - the next merge
 # will restore it at its default, because a deletion is indistinguishable from
 # a key that was never there. Set it to false or empty instead of deleting it.
-config-version: 42
+config-version: 43
 
 local-ai:
   # Local-only supervised clean/advertising classifier. No external AI.
@@ -1566,8 +1566,17 @@ anti-ad:
     model-resource: '/antiad.ft.bin'
   l3:
     enabled: true
-    # One LLM call per player per gap. Everything else in the ambiguous band
-    # falls back to the heuristic aggregator instead of queueing requests.
+    # always  the LLM reads EVERY message the regex and L2 cleared, so a pitch
+    #         with no findable address still reaches the one layer that
+    #         understands meaning. Costs one call per player per gap, cached
+    #         per unique line, and skipped on the main thread so signs, books
+    #         and anvils never stall.
+    # band    old behaviour: the LLM only sees messages L2 put in the
+    #         0.40-0.85 ambiguous band.
+    scan-mode: always
+    # One LLM call per player per gap. Everything else falls back to the
+    # heuristic aggregator (or, in scan-all mode, simply passes) instead of
+    # queueing requests.
     min-call-gap-ms: 10000
     context-messages: 5
   llm:
@@ -1577,5 +1586,11 @@ anti-ad:
     model: 'millenium-5'
     api-keys: [ 'local' ]
     timeout-seconds: 8
+    # Scan-all calls get a shorter leash than band calls: they run for every
+    # line, so a hung model must not hold the chat thread for 8 seconds.
+    scan-timeout-seconds: 3
+    # Each in-flight scan parks a chat thread on HTTP. Past this many, further
+    # messages pass unscanned rather than parking more threads.
+    max-concurrent-scans: 4
   log:
     keep-days: 30

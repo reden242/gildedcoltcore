@@ -30,6 +30,7 @@
 !antiad/*.py
 !antiad/*.java
 !antiad/*.tsv
+!antiad/*.txt
 !antiad/*.md
 !README.md
 !.gitignore

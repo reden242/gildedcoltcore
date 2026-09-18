@@ -63,7 +63,7 @@ public final class ConfigUpdater {
     private ConfigUpdater() { }
 
     /** Bump this whenever a key is added to the bundled config.yml. */
-    public static final int CURRENT_VERSION = 39;
+    public static final int CURRENT_VERSION = 40;
 
     private static final DateTimeFormatter STAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");

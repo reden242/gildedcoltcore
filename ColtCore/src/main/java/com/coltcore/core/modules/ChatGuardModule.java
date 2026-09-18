@@ -1103,6 +1103,25 @@ public final class ChatGuardModule implements Listener {
 
         // With no layer-one address signal, the advertising model is not called.
 
+        // Layer 3, scan-all mode: nothing cheaper objected, so the LLM reads
+        // the message on its own merits. This is the only layer that catches a
+        // pitch whose address the regex cannot find and whose shape the
+        // classifier has never seen, which is exactly the obscure-TLD case.
+        //
+        // Chat arrives off the main thread, so the blocking call is fine here.
+        // Signs, books and anvils run on the main thread and scanEveryMessage()
+        // refuses to block those, so they cost nothing and stay fail-open.
+        if (this.antiAd != null && this.antiAd.scanModeAlways() && !"anvil".equals(source)) {
+            AntiAdPipeline.LlmVerdict llm = this.antiAd.scanEveryMessage(
+                    p.getUniqueId(), p.getName(), raw);
+            if (llm.flag() && llm.confidence() >= 0.60D) {
+                this.antiAd.log(p.getName(), source, raw, null, -1.0D,
+                        llm.reasoning(), "flag-llm-scan");
+                return blockAdvertising(p, raw, source, "llm scan", CAT_ADVERT,
+                        "L3 LLM scan: " + llm.reasoning(), llm.confidence(), true);
+            }
+        }
+
         // Nothing objected to it. Sampled occasionally as a clean example.
         this.local.learnClean(raw);
         return false;

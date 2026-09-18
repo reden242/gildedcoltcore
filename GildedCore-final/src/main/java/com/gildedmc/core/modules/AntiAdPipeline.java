@@ -39,14 +39,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * loading and the hash contract live in {@link FastTextModel}.
  *
  * <h2>Layer 3 - the local LLM</h2>
- * When L2 lands in the ambiguous band (0.40-0.85) the message and its recent
- * context go to a locally-hosted OpenAI-compatible endpoint (default
- * {@code http://127.0.0.1:8080/v1/chat/completions}, model {@code millenium-5}).
- * The LLM answers strict JSON; anything else - timeout, refusal, unparseable,
- * rate limit (one call per player per 10 s) - is treated as "no opinion" and
- * the message passes. The LLM is never the only reason a player is punished:
- * it only confirms or clears cases the classifier already found ambiguous, and
- * a confirmed flag still rides the existing ladder and review queue.
+ * The message and its recent context go to a locally-hosted OpenAI-compatible
+ * endpoint (default {@code http://127.0.0.1:8080/v1/chat/completions}, model
+ * {@code millenium-5}). The LLM answers strict JSON; anything else - timeout,
+ * refusal, unparseable, rate limit (one call per player per 10 s) - is treated
+ * as "no opinion" and the message passes.
+ *
+ * <p>Two entry points share one implementation. {@link #llmCheck} is the
+ * tiebreaker used when L2 lands in the ambiguous band (0.40-0.85).
+ * {@link #scanEveryMessage} is the scanner: with {@code l3.scan-mode: always}
+ * it reads every message the regex and L2 <em>cleared</em>, which is the only
+ * way a pitch with no findable address - an obscure TLD, a bare server name -
+ * gets judged on meaning. It never blocks the server tick: the main-thread
+ * guard returns "no opinion" for signs, books and anvils, and repeated lines
+ * hit the verdict cache instead of the model.
  */
 public final class AntiAdPipeline {
 
@@ -75,6 +81,28 @@ public final class AntiAdPipeline {
     private final Map<UUID, Deque<String>> context = new ConcurrentHashMap<>();
     private static final int CONTEXT_MESSAGES = 5;
 
+    /**
+     * Verdict cache keyed by text hash. The same line ("gg", a copypasta, a
+     * repeated spam post) is not sent to the model twice, which is what makes
+     * scanning every message affordable.
+     */
+    private final Map<Integer, LlmVerdict> verdictCache = new ConcurrentHashMap<>();
+    private static final int CACHE_MAX = 4096;
+
+    // layer 3 scan policy
+    private boolean scanAlways = true;
+    private int scanTimeoutSeconds = 3;
+    private int maxConcurrentScans = 4;
+
+    /**
+     * Scan-all calls in flight. Each one parks an async chat thread on HTTP for
+     * up to {@code scan-timeout-seconds}, so when the model is slow the cap is
+     * what stops a busy server from parking every chat thread it has. Over the
+     * cap the message simply passes unscanned, like any other fail-open path.
+     */
+    private final java.util.concurrent.atomic.AtomicInteger scansInFlight =
+            new java.util.concurrent.atomic.AtomicInteger();
+
     private Connection database;                    // antiad.db, may stay null
 
     public AntiAdPipeline(JavaPlugin plugin) {
@@ -100,6 +128,8 @@ public final class AntiAdPipeline {
         }
 
         this.l3Enabled = section.getBoolean("l3.enabled", true);
+        this.scanAlways = "always".equalsIgnoreCase(
+                section.getString("l3.scan-mode", "always"));
         ConfigurationSection llm = section.getConfigurationSection("llm");
         if (llm != null) {
             this.llmEndpoint = llm.getString("endpoint", this.llmEndpoint);
@@ -107,6 +137,8 @@ public final class AntiAdPipeline {
             List<String> keys = llm.getStringList("api-keys");
             if (!keys.isEmpty()) this.llmKey = keys.get(0);
             this.llmTimeoutSeconds = llm.getInt("timeout-seconds", 8);
+            this.scanTimeoutSeconds = llm.getInt("scan-timeout-seconds", 3);
+            this.maxConcurrentScans = Math.max(1, llm.getInt("max-concurrent-scans", 4));
         }
         this.l3MinCallGapMs = section.getLong("l3.min-call-gap-ms", 10_000L);
 
@@ -161,7 +193,54 @@ public final class AntiAdPipeline {
      * MUST be called off the main thread (it blocks on HTTP).
      */
     public LlmVerdict llmCheck(UUID playerId, String playerName, String raw) {
+        return llmVerdict(playerId, playerName, raw, this.llmTimeoutSeconds);
+    }
+
+    /**
+     * The LLM as a first-class scanner rather than a tiebreaker.
+     *
+     * <p>Called for messages the regex and the classifier did <em>not</em>
+     * flag, so the layer that can read meaning gets to look at traffic the
+     * cheaper layers cleared. Two things keep that affordable: the per-player
+     * rate limit (one call per {@code l3.min-call-gap-ms}), and a verdict
+     * cache, so a repeated line costs nothing after the first look.
+     *
+     * <p>Only callable off the main thread. On the main thread the caller must
+     * not block, so this returns "no opinion" immediately - the message is
+     * recorded for context instead and the next scanned line benefits.
+     */
+    public LlmVerdict scanEveryMessage(UUID playerId, String playerName, String raw) {
+        if (!this.scanAlways) return LlmVerdict.noOpinion("scan-always off");
+        if (Bukkit.isPrimaryThread()) return LlmVerdict.noOpinion("main thread");
+        String key = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        if (this.verdictCache.containsKey(key.hashCode())) {
+            return llmVerdict(playerId, playerName, raw, this.scanTimeoutSeconds);
+        }
+        if (this.scansInFlight.get() >= this.maxConcurrentScans) {
+            return LlmVerdict.noOpinion("scan backlog");
+        }
+        this.scansInFlight.incrementAndGet();
+        try {
+            return llmVerdict(playerId, playerName, raw, this.scanTimeoutSeconds);
+        } finally {
+            this.scansInFlight.decrementAndGet();
+        }
+    }
+
+    /** Whether the LLM scans every message, not just the ambiguous band. */
+    public boolean scanModeAlways() {
+        return this.scanAlways && this.l3Enabled;
+    }
+
+    private LlmVerdict llmVerdict(UUID playerId, String playerName, String raw,
+                                  int timeoutSeconds) {
         if (!this.l3Enabled) return LlmVerdict.noOpinion("l3 disabled");
+
+        String key = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        int hash = key.hashCode();
+        LlmVerdict cached = this.verdictCache.get(hash);
+        if (cached != null) return cached;
+
         Long last = this.lastLlmCall.get(playerId);
         long now = System.currentTimeMillis();
         if (last != null && now - last < this.l3MinCallGapMs) {
@@ -176,8 +255,13 @@ public final class AntiAdPipeline {
         }
         String body = buildRequest(playerName, raw, recent);
         try {
-            String response = post(body);
-            return parseVerdict(response);
+            String response = post(body, timeoutSeconds);
+            LlmVerdict verdict = parseVerdict(response);
+            if (verdict.confidence() >= 0.0D) {
+                if (this.verdictCache.size() > CACHE_MAX) this.verdictCache.clear();
+                this.verdictCache.put(hash, verdict);
+            }
+            return verdict;
         } catch (Throwable t) {
             this.plugin.getLogger().warning("[AntiAd] LLM unavailable, fail-open: " + t.getMessage());
             return LlmVerdict.noOpinion("error");
@@ -209,13 +293,13 @@ public final class AntiAdPipeline {
         return text.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private String post(String json) throws Exception {
+    private String post(String json, int timeoutSeconds) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(this.llmEndpoint).openConnection();
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json");
         connection.setRequestProperty("Authorization", "Bearer " + this.llmKey);
         connection.setConnectTimeout(2_000);
-        connection.setReadTimeout(this.llmTimeoutSeconds * 1_000);
+        connection.setReadTimeout(Math.max(1, timeoutSeconds) * 1_000);
         connection.setDoOutput(true);
         try (OutputStream out = connection.getOutputStream()) {
             out.write(json.getBytes(StandardCharsets.UTF_8));

@@ -21,6 +21,7 @@ import numpy as np
 
 HERE = pathlib.Path(__file__).parent
 SEED = HERE / "seed_corpus.tsv"
+TLD_CORPUS = HERE / "tld_corpus.tsv"
 REALCHAT = HERE.parent / "chat_corpus.txt"
 VECTORS = HERE / "crawl-100d.npz"
 MODEL_OUT = HERE / "antiad.ft.bin"
@@ -70,6 +71,15 @@ def main():
             label, _, text = line.rstrip("\n").partition("\t")
             if label in LABELS:
                 add(text, label)
+
+    # Every IANA TLD, advertising and benign, from tld_corpus.py. This is what
+    # keeps a host on an obscure TLD from being invisible to the model.
+    if TLD_CORPUS.exists():
+        with open(TLD_CORPUS, encoding="utf-8") as f:
+            for line in f:
+                label, _, text = line.rstrip("\n").partition("\t")
+                if label in LABELS:
+                    add(text, label)
 
     if REALCHAT.exists():
         with open(REALCHAT, encoding="utf-8") as f:

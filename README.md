@@ -27,22 +27,46 @@ package/branding renames (`com.coltcore.*` ↔ `com.gildedmc.*`, `coltcore.net` 
    time), hashed char 3–6-gram subword embeddings, mean pooling, softmax over
    `advertising` / `clean`. Confident advertising (≥0.85) → block; confident
    clean (<0.40) → pass logged; anything between is ambiguous and continues.
-4. **Local LLM context check (L3)** — ambiguous messages go to a **locally
-   hosted LLM** (`millenium-5` by default) through an OpenAI-compatible
-   endpoint on loopback (`http://127.0.0.1:8080/v1/chat/completions`). The
-   prompt carries the player's last 5 messages for context; the LLM answers
-   strict JSON `{flag, confidence, reasoning}`. A confirmed flag rides the
-   existing punishment ladder; a clear verdict passes with an evasion-suspicion
-   log entry. Rate limit: one call per player per 10 s. **Fail-open
-   everywhere** — timeout, unparseable answer, or rate limit means pass, never
-   punish. When the LLM has no opinion, the local heuristic aggregator
-   (`LocalContextAggregator`) decides as before.
+4. **Local LLM (L3)** — a **locally hosted LLM** (`millenium-5` by default)
+   through an OpenAI-compatible endpoint on loopback
+   (`http://127.0.0.1:8080/v1/chat/completions`). The prompt carries the
+   player's last 5 messages for context; the LLM answers strict JSON
+   `{flag, confidence, reasoning}`. A confirmed flag rides the existing
+   punishment ladder; a clear verdict passes with an evasion-suspicion log
+   entry. Rate limit: one call per player per 10 s. **Fail-open everywhere** —
+   timeout, unparseable answer, or rate limit means pass, never punish. When
+   the LLM has no opinion on an ambiguous message, the local heuristic
+   aggregator (`LocalContextAggregator`) decides as before.
+
+   **The LLM is a scanner, not just a tiebreaker.** With `l3.scan-mode: always`
+   (the default) it also reads every message the regex and L2 *cleared*. That
+   matters because L1 needs a findable address and L2 only knows the shapes it
+   was trained on; a pitch written as a bare server name, or on a TLD nobody
+   uses, has neither. Three things keep the extra calls cheap and safe:
+
+   - **Verdict cache** — keyed by the lowercased line, so "gg", a copypasta or a
+     repeated spam post costs one call ever, not one per send.
+   - **Rate limit** — still one call per player per `min-call-gap-ms`.
+   - **Main-thread guard** — `scanEveryMessage()` returns "no opinion"
+     immediately when `Bukkit.isPrimaryThread()`, so signs, books, anvil
+     renames and screened commands (all synchronous) never block the tick.
+     Chat is an `AsyncChatEvent`, which is why it can wait on HTTP at all.
+
+   A scan-all flag needs `confidence ≥ 0.60` and is marked `llmConfirmed`, so
+   it survives the regex double-check like any other LLM confirmation.
+   `scan-timeout-seconds` (default 3) gives these calls a shorter leash than
+   band calls, and `max-concurrent-scans` (default 4) caps how many chat
+   threads can be parked on HTTP at once — past the cap a message passes
+   unscanned rather than queueing. Set `l3.scan-mode: band` to restore the old
+   tiebreaker-only behaviour.
 
 ### Decision matrix
 
 | Condition | Action |
 |---|---|
-| No L1 hit | pass, no model cost |
+| No L1 hit, `scan-mode: always`, LLM flags (≥0.60) | block, `flag-llm-scan` |
+| No L1 hit, `scan-mode: always`, LLM clears / no opinion | pass |
+| No L1 hit, `scan-mode: band`, or main-thread surface | pass, no model cost |
 | L1 hit, L2 < 0.40 | pass, logged (whitelist-tuning feedback) |
 | L1 hit, L2 ≥ 0.85 | block (`advertising` / `light-advertising` ladder) |
 | L2 in 0.40–0.85, LLM confirms | block, punishment survives the regex double-check |
@@ -59,9 +83,21 @@ surface, raw text, L1 evidence, L2 probability, LLM verdict and action taken.
 
 - **Trained on**: `crawl-300d-2M-subword.zip` fastText Common Crawl vectors
   (training-time only, never shipped) + the seed corpus (11,261 advertising
-  samples with obfuscation mutations) + 20,696 real clean chat lines.
-- **Validation**: precision 0.999, recall 0.998 on the held-out split;
-  temperature-scaled (T=4.0) so the ambiguous band 0.40–0.85 carries ~6.5% of
+  samples with obfuscation mutations) + 20,696 real clean chat lines +
+  **`antiad/tld_corpus.tsv`**, 16,681 generated rows covering **every one of
+  the 1,438 IANA-delegated TLDs** (12,820 advertising / 3,861 clean).
+- **Why the TLD corpus exists**: the TLD list is a bypass surface. `join
+  coolpvp.<tld>` works from any delegated TLD, and the obscure ones are
+  exactly where free hosts and throwaway servers live. A model that has only
+  seen `.com`/`.net`/`.gg` has no representation for the shape. Every TLD gets
+  advertising coverage; the ~1,428 non-common TLDs get a second pass, and each
+  is also used in benign sentences ("the docs at papermc.museum explain it",
+  "reddit.zw is a bad website lol") — without those negatives the model would
+  learn "unfamiliar TLD = advertising" and start muting people for mentioning
+  a niche site. Ad rows include the obfuscations the normalizer is built to
+  undo (written dot, `(dot)`, spaced letters, leet).
+- **Validation**: precision 0.997, recall 0.997 on the held-out split;
+  temperature-scaled (T=4.0) so the ambiguous band 0.40–0.85 carries ~7.6% of
   confidence mass — that band is what triggers L3, and without the scaling the
   LLM would never fire.
 - **Format**: custom `FTA1` binary (big-endian): header ints, UTF vocab and
@@ -71,11 +107,20 @@ surface, raw text, L1 evidence, L2 probability, LLM verdict and action taken.
   `<gram>`, `row = vocabSize + hash % bucket`) is implemented identically in
   the Python trainer and the Java loader, and verified by a golden-vector
   parity test (`antiad/vectors-check.tsv`, 10 texts, delta 0.000000).
-- **Hard budget**: export fails if the binary exceeds 5 MB (current: 3.62 MB).
+- **Hard budget**: export fails if the binary exceeds 5 MB (current: 3.73 MB).
+- **Rare-TLD spot check** (`antiad/TldCheck.java`, real model, real weights):
+  `join coolpvp.zip` 0.963 · `come play minescape.museum` 0.885 · `free ranks
+  at funserver.nra` 0.930 vs `the docs at papermc.museum explain it` 0.063 ·
+  `is github.pnc down for anyone else` 0.092 · `gg wp that was a good fight`
+  0.016.
 
 ### Retraining
 
 ```powershell
+# 0. Refresh the IANA list and rebuild the TLD coverage corpus
+curl -o antiad/tld_iana.txt https://data.iana.org/TLD/tlds-alpha-by-domain.txt
+python antiad/tld_corpus.py
+
 # 1. Reduce the crawl vectors (streams the 4.5 GB .vec straight from the zip)
 python antiad/reduce_vecs.py
 
@@ -94,7 +139,6 @@ copy antiad\antiad.ft.bin GildedCore-final\src\main\resources\
 Metric gates (export refuses otherwise): advertising precision ≥ 0.97,
 recall ≥ 0.90, clean false-flag rate ≤ 0.10, and ≥ 3% of validation
 confidence inside 0.40–0.85 after temperature scaling.
-
 ## The local LLM (millenium-5)
 
 Any OpenAI-compatible chat-completions server works. Point
@@ -130,19 +174,25 @@ Grant to players only through LuckPerms:
 
 ## Config
 
-New `anti-ad:` section (config-version 42 in ColtCore / 39 in GildedCore;
+New `anti-ad:` section (config-version 43 in ColtCore / 40 in GildedCore;
 `ConfigUpdater` merges it into live configs automatically):
 
 ```yaml
 anti-ad:
   own-domain: 'coltcore.net'          # gildedmc.net in GildedCore
   l2: { enabled: true, model-resource: '/antiad.ft.bin' }
-  l3: { enabled: true, min-call-gap-ms: 10000, context-messages: 5 }
+  l3:
+    enabled: true
+    scan-mode: always                 # 'band' = LLM only in the ambiguous band
+    min-call-gap-ms: 10000
+    context-messages: 5
   llm:
     endpoint: 'http://127.0.0.1:8080/v1/chat/completions'
     model: 'millenium-5'
     api-keys: [ 'local' ]
     timeout-seconds: 8
+    scan-timeout-seconds: 3           # shorter leash for scan-all calls
+    max-concurrent-scans: 4           # cap on parked chat threads
   log: { keep-days: 30 }
 ```
 
