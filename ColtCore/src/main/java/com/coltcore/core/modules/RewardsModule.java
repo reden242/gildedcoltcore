@@ -183,7 +183,7 @@ public final class RewardsModule {
         return selected;
     }
 
-    private List<Reward> playtimeRewards() {
+    public List<Reward> playtimeRewards() {
         return configured("playtime-rewards.rewards", "hours");
     }
 
@@ -226,10 +226,13 @@ public final class RewardsModule {
         }
     }
 
+    public FileConfiguration getData() { return this.data; }
+    public JavaPlugin getPlugin() { return this.plugin; }
+
     private String base(Player player) {
         return "players." + player.getUniqueId();
     }
 
-    private record Reward(String id, long threshold, List<String> commands) {
+    public record Reward(String id, long threshold, List<String> commands) {
     }
 }

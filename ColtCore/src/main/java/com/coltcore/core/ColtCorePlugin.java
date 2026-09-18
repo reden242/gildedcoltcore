@@ -48,9 +48,13 @@ import com.coltcore.core.modules.AntiAdPipeline;
 import com.coltcore.core.modules.BillFordModule;
 import com.coltcore.core.modules.ChatLimiterModule;
 import com.coltcore.core.modules.CreativeGuardModule;
+import com.coltcore.core.modules.ContextAwareAntiAd;
 import com.coltcore.core.modules.IntegratedCoreModuleX;
 import com.coltcore.core.modules.JoinPacketIsolation;
+import com.coltcore.core.modules.RenameContextTracker;
+import com.coltcore.core.modules.RewardsGui;
 import com.coltcore.core.modules.ReviewModule;
+import com.coltcore.core.modules.SignContextTracker;
 import com.coltcore.core.modules.StashModule;
 import com.coltcore.core.modules.RedeemCodeModule;
 import com.coltcore.core.modules.EntityLimitModule;
@@ -186,6 +190,10 @@ implements Listener {
     private StaffMonitorModule staffMonitorModule;
     private ChatGuardModule chatGuardModule;
     private AntiAdPipeline antiAdPipeline;
+    private SignContextTracker signContextTracker;
+    private RenameContextTracker renameContextTracker;
+    private ContextAwareAntiAd contextAwareAntiAd;
+    private RewardsGui rewardsGui;
 
     public ChatGuardModule chatGuard() { return this.chatGuardModule; }
     private ActiveRankModule activeRankModule;
@@ -238,6 +246,13 @@ implements Listener {
         this.antiAdPipeline = new AntiAdPipeline(this);
         this.chatGuardModule.setAntiAd(this.antiAdPipeline);
         Bukkit.getPluginManager().registerEvents((Listener)this.chatGuardModule, (Plugin)this);
+        // Context-aware anti-ad: 5-layer system with sign/rename/proximity context.
+        this.signContextTracker = new SignContextTracker();
+        this.renameContextTracker = new RenameContextTracker();
+        this.contextAwareAntiAd = new ContextAwareAntiAd(this.antiAdPipeline, this.signContextTracker, this.renameContextTracker);
+        this.chatGuardModule.setContextAwareAntiAd(this.contextAwareAntiAd);
+        Bukkit.getPluginManager().registerEvents((Listener)this.signContextTracker, (Plugin)this);
+        Bukkit.getPluginManager().registerEvents((Listener)this.renameContextTracker, (Plugin)this);
         this.activeRankModule = new ActiveRankModule(this);
         this.activeRankModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.activeRankModule, (Plugin)this);
@@ -269,6 +284,9 @@ implements Listener {
         this.redeemModule.setCreatorGate(this::isManagerPlus);
         this.rewardsModule = new RewardsModule(this);
         this.rewardsModule.enable();
+        this.rewardsGui = new RewardsGui(this.rewardsModule);
+        this.rewardsGui.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.rewardsGui, (Plugin)this);
         // Chunk entity cap, minecart refund and machine-launch refusal. Silent
         // to players by design; staff alerts go to the console.
         this.entityLimitModule = new EntityLimitModule(this);
@@ -340,6 +358,10 @@ implements Listener {
         if (this.stashModule != null) this.stashModule.disable();
         if (this.kelpGrowthModule != null) this.kelpGrowthModule.disable();
         if (this.staffMonitorModule != null) this.staffMonitorModule.disable();
+        if (this.rewardsGui != null) this.rewardsGui.disable();
+        if (this.contextAwareAntiAd != null) this.contextAwareAntiAd.disable();
+        if (this.renameContextTracker != null) this.renameContextTracker.disable();
+        if (this.signContextTracker != null) this.signContextTracker.disable();
         if (this.chatGuardModule != null) this.chatGuardModule.disable();
         if (this.activeRankModule != null) this.activeRankModule.disable();
         if (this.staffMacroModule != null) this.staffMacroModule.disable();

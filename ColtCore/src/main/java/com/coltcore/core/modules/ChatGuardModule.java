@@ -108,9 +108,10 @@ public final class ChatGuardModule implements Listener {
     private ReviewModule review;
     /** Layer 2/3 of the anti-ad pipeline; null until the main class wires it. */
     private AntiAdPipeline antiAd;
+    /** 5-layer context-aware anti-ad system; null until wired. */
+    private ContextAwareAntiAd contextAwareAntiAd;
 
     private boolean enabled;
-    private boolean cancelMessage = true;
     private int repeatFastPath = 2;
     private boolean dryRun;
 
@@ -291,12 +292,14 @@ public final class ChatGuardModule implements Listener {
     private static final int SHORT_TERM = 4;
 
     /**
-     * Characters allowed between the letters of a term.
+     * One character allowed between the letters of a term.
      *
      * <p>Junk consonants and digits only. See {@link #compileTerm} for the
-     * measurements behind excluding vowels.
+     * measurements behind excluding vowels, and for why this is a single
+     * character rather than a run: the run is built at the use site, possessive
+     * and refusing anything the class after it can consume for itself.
      */
-    private static final String FILLER = "[jzxwv0-9]*";
+    private static final String FILLER = "[jzxwv0-9]";
 
     /**
      * Whether a short term appears as a word rather than as a fragment.
@@ -340,6 +343,26 @@ public final class ChatGuardModule implements Listener {
      * are junk consonants and digits, which is what the class carries now.
      * Measured over 11,677 real lines this removed 20 flags, all false, and
      * cost nothing on the evasion set.
+     *
+     * <h2>Why the filler is possessive, and guarded</h2>
+     * The filler used to be a bare {@code [jzxwv0-9]*} between two unbounded
+     * class runs, and the filler class overlaps the letter classes — {@code z}
+     * is one of the ways to write {@code s}, and most digits are leet for some
+     * letter — so a run of {@code z} after an {@code a} can be split between the
+     * filler and each following {@code [s5$z]+} in every possible way. When the
+     * tail then fails, the engine tries all of those splits: measured on the
+     * main thread with the shipped lexicon, {@code asshole} followed by 160
+     * {@code z} took 5.2 s and {@code assmunch} past 13 s, the cost grew like
+     * n^4, and a 1,023-character book page — the size the book handler hands
+     * over synchronously — did not return at all.
+     *
+     * <p>The filler is now possessive, so what it matches it keeps, and it
+     * refuses any character the class after it can consume for itself. The guard
+     * is what preserves matching: a substitute digit or {@code z} that the next
+     * letter could have used is left for that letter, so {@code a55}, {@code
+     * b00b} and {@code ni69er} still match and the filler only ever absorbs
+     * characters no later letter can. Verified by diffing accept/reject between
+     * the old and new patterns over the shipped lexicon and an evasion set.
      */
     static Pattern compileTerm(String term) {
         StringBuilder rx = new StringBuilder();
@@ -353,8 +376,8 @@ public final class ChatGuardModule implements Listener {
         // leaves untouched.
         String t = Scripts.normalise(term);
         if (t.isEmpty()) t = term.toLowerCase(Locale.ROOT);
+        String prev = "";
         for (int i = 0; i < t.length(); i++) {
-            if (i > 0) rx.append(FILLER);
             char c = t.charAt(i);
             String cls = switch (c) {
                 case 'a' -> "[a4@]";
@@ -376,7 +399,17 @@ public final class ChatGuardModule implements Listener {
                 case 'f' -> "(?:f|ph)";
                 default  -> Pattern.quote(String.valueOf(c));
             };
+            // Possessive, and never a character the letter on either side of it
+            // can consume itself -- see the note on compileTerm's cost. The two
+            // guards are what leave the set of matching strings unchanged: a
+            // substitute digit or z ("a55" for ass) is left for the letter that
+            // can carry it, and a real letter can no longer be re-read as filler
+            // and split a run a second way. Possessive is what stops the filler
+            // being re-split against the next class at all.
+            if (i > 0) rx.append("(?:(?!").append(prev).append("|").append(cls)
+                    .append(")").append(FILLER).append(")*+");
             rx.append(cls).append('+');
+            prev = cls;
         }
         return Pattern.compile(rx.toString(), Pattern.CASE_INSENSITIVE);
     }
@@ -423,11 +456,13 @@ public final class ChatGuardModule implements Listener {
     /** Wires the anti-ad pipeline (layers 2 and 3) from the main class. */
     public void setAntiAd(AntiAdPipeline antiAd) { this.antiAd = antiAd; }
 
+    /** Wires the 5-layer context-aware anti-ad system. */
+    public void setContextAwareAntiAd(ContextAwareAntiAd ctx) { this.contextAwareAntiAd = ctx; }
+
     private void readConfig() {
         ConfigurationSection c = this.plugin.getConfig().getConfigurationSection("chat-guard");
         if (c == null) { this.enabled = false; return; }
         this.enabled = c.getBoolean("enabled", false);
-        this.cancelMessage = c.getBoolean("cancel-message", true);
         this.repeatFastPath = Math.max(1, c.getInt("repeat-fast-path", 2));
         this.dryRun = c.getBoolean("dry-run", false);
         this.mutedMessage = c.getString("muted-message", this.mutedMessage);
@@ -788,7 +823,7 @@ public final class ChatGuardModule implements Listener {
 
         String spam = spamVerdict(p, raw);
         if (spam != null) {
-            if (this.cancelMessage) event.setCancelled(true);
+            event.setCancelled(true);
             warn(p, "&cSlow down — " + spam);
             alert("&e" + p.getName() + " &7spam: &f" + spam);
             return;
@@ -798,7 +833,7 @@ public final class ChatGuardModule implements Listener {
         if (this.antiAd != null) this.antiAd.record(p.getUniqueId(), raw);
 
         if (screen(p, raw, "chat")) {
-            if (this.cancelMessage) event.setCancelled(true);
+            event.setCancelled(true);
         }
     }
 
@@ -809,31 +844,60 @@ public final class ChatGuardModule implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onSign(SignChangeEvent event) {
         Player p = event.getPlayer();
-        StringBuilder sb = new StringBuilder();
-        for (String line : event.getLines()) {
-            if (line != null && !line.isBlank()) sb.append(line).append(' ');
-        }
-        String text = sb.toString().trim();
-        if (text.isEmpty()) return;
         if (!this.enabled || p.hasPermission(PERM_BYPASS)) return;
         if (this.muteBlocksTextSources && blockedByMute(p)) { event.setCancelled(true); return; }
-        if (screen(p, text, "sign")) event.setCancelled(true);
+
+        // Screen and clear each line on its own. The sign is still placed, minus
+        // whatever offended - a blank line reads as a mistake the player has to
+        // fix, which is the same information as a refusal without the collateral
+        // of losing the three good lines next to it.
+        String[] lines = event.getLines();
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (line == null || line.isBlank()) continue;
+            if (screen(p, line, "sign")) event.setLine(i, "");
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBook(PlayerEditBookEvent event) {
         Player p = event.getPlayer();
-        BookMeta meta = event.getNewBookMeta();
-        StringBuilder sb = new StringBuilder();
-        if (meta.hasTitle() && meta.getTitle() != null) sb.append(meta.getTitle()).append(' ');
-        for (String page : meta.getPages()) {
-            if (page != null && !page.isBlank()) sb.append(page).append(' ');
-        }
-        String text = sb.toString().trim();
-        if (text.isEmpty()) return;
         if (!this.enabled || p.hasPermission(PERM_BYPASS)) return;
         if (this.muteBlocksTextSources && blockedByMute(p)) { event.setCancelled(true); return; }
-        if (screen(p, text, "book")) event.setCancelled(true);
+
+        BookMeta meta = event.getNewBookMeta();
+        boolean touched = false;
+
+        // The title is checked on its own: it is one line and blanking it is the
+        // same refusal an anvil rename gets.
+        if (meta.hasTitle() && meta.getTitle() != null && !meta.getTitle().isBlank()
+                && screen(p, meta.getTitle(), "book")) {
+            meta.setTitle("");
+            touched = true;
+        }
+
+        // Each page's lines are screened one at a time so that clearing one does
+        // not take the rest of the page with it - the old code joined the title
+        // and every page into one string and cancelled the whole edit.
+        List<String> pages = new ArrayList<>(meta.getPages());
+        for (int i = 0; i < pages.size(); i++) {
+            String page = pages.get(i);
+            if (page == null || page.isBlank()) continue;
+            String[] pageLines = page.split("\n", -1);
+            boolean pageTouched = false;
+            for (int j = 0; j < pageLines.length; j++) {
+                if (pageLines[j].isBlank()) continue;
+                if (screen(p, pageLines[j], "book")) { pageLines[j] = ""; pageTouched = true; }
+            }
+            if (pageTouched) {
+                pages.set(i, String.join("\n", pageLines));
+                touched = true;
+            }
+        }
+        if (touched) {
+            meta.setPages(pages);
+            event.setNewBookMeta(meta);
+        }
     }
 
     /**
@@ -873,11 +937,16 @@ public final class ChatGuardModule implements Listener {
     /* ------------------------------------------------------------------ */
 
     /**
-     * Runs the regex layers and, if something matched, starts the punishment.
+     * Runs the regex layers and reports whether the text offends.
      *
-     * Returns true when the caller should block the text. Everything that
-     * touches the database or dispatches a command happens off this thread, so
-     * this is safe to call from a synchronous event.
+     * Returns true when the caller must remove the text: chat and private
+     * messages are cancelled, a rename is refused, and the one offending line
+     * of a sign or a book is blanked. Advertising is never punished - see
+     * {@link #blockAdvertising} - and the module runs in advertising-only
+     * mode, so nothing reaches the ladder from here.
+     *
+     * Everything that touches the database or dispatches a command happens off
+     * this thread, so this is safe to call from a synchronous event.
      */
     private static final java.util.Set<String> BENIGN_ELONGATED = java.util.Set.of(
             "again","more","hello","hey","yeah","no","yes","lol","haha","please","thanks","thank","you",
@@ -937,6 +1006,17 @@ public final class ChatGuardModule implements Listener {
 
     /** Layers 1-3 of the advertising pipeline. Layer 0 is advertForm(). */
     private boolean screenAdvertising(Player player, String raw, String source) {
+        // Layer 5: context-aware 5-layer anti-ad system runs first.
+        if (this.contextAwareAntiAd != null) {
+            ContextAwareAntiAd.AdVerdict verdict = this.contextAwareAntiAd.checkChat(player, raw);
+            if (verdict.block()) {
+                return blockAdvertising(player, raw, source,
+                        "context-aware (" + verdict.reason() + ")",
+                        raw.contains("/") || raw.contains(".") ? CAT_ADVERT : CAT_LIGHT_ADVERT,
+                        "L5-context", verdict.confidence());
+            }
+        }
+
         String address = advertHit(raw);
         AdvertContext.Hit soft = address == null
                 ? AdvertContext.find(raw, advertForm(raw)) : null;
@@ -960,6 +1040,19 @@ public final class ChatGuardModule implements Listener {
                     "L1+L2", advertisingProbability);
         }
         if (advertisingProbability >= 0.0D && advertisingProbability < 0.40D) {
+            // L1 or L2 - never L2 instead of L1.
+            //
+            // A low score may overrule a guess and nothing else. When layer one
+            // matched an address the player actually wrote, or layer 3's
+            // address-grade context did, the classifier does not get to veto it;
+            // see addressGradeEvidence. What the clear still exists for is the
+            // light, name-only context hits, which are the weakest signal in the
+            // pipeline and the reason the branch was added.
+            if (addressGradeEvidence(raw, address, soft)) {
+                return blockAdvertising(player, raw, source, evidence, CAT_ADVERT,
+                        "L1 (L2 " + String.format(Locale.ROOT, "%.2f", advertisingProbability) + ")",
+                        patternConfidence);
+            }
             this.plugin.getLogger().info("[LocalAI] L1 false positive cleared: " + raw);
             if (this.antiAd != null) {
                 this.antiAd.log(player.getName(), source, raw, evidence,
@@ -974,7 +1067,7 @@ public final class ChatGuardModule implements Listener {
         // enough to run inline wherever the message came from.
         if (fromClassifier && advertisingProbability >= 0.40D && this.antiAd != null) {
             AntiAdPipeline.ModelVerdict verdict = this.antiAd.l3Check(
-                    player.getUniqueId(), raw);
+                    player.getUniqueId(), advertForm(raw));
             if (verdict.flag() && verdict.confidence() >= 0.60D) {
                 this.antiAd.log(player.getName(), source, raw, evidence,
                         advertisingProbability, verdict.reasoning(), "flag-l3");
@@ -1023,11 +1116,13 @@ public final class ChatGuardModule implements Listener {
     }
 
     /**
-     * @param llmConfirmed true when the flag came from the L3 LLM. Such flags
-     *                     survive {@link #advertDoubleCheck} by construction -
-     *                     the model saw an obfuscated address the regex engine
-     *                     cannot re-find, and silently dropping the punishment
-     *                     there was the old behaviour's failure mode.
+     * Warn the sender, alert staff, train the local model - and stop.
+     *
+     * <p>Advertising is handled by removing the content and nothing else, so
+     * there is no punishment call here. The {@code llmConfirmed} parameter is
+     * kept because the two callers still distinguish an L3 confirmation from a
+     * regex hit and that distinction is worth preserving in the log if
+     * punishment is ever reinstated; it currently decides nothing.
      */
     private boolean blockAdvertising(Player player, String raw, String source,
                                      String evidence, String category,
@@ -1040,7 +1135,11 @@ public final class ChatGuardModule implements Listener {
         alert("&4" + player.getName() + " &7advertising &f" + evidence
                 + " &7in &f" + source + " &8(&7" + reason + ", "
                 + String.format(Locale.ROOT, "%.0f%%", confidence * 100.0D) + "&8): &f" + raw);
-        punishAsync(player, category, raw, source, llmConfirmed);
+        // No punishment for advertising. The content is stopped - the message
+        // is not sent, the rename is refused, the offending sign part or book
+        // line is blanked - and the sender warning and staff alert above keep
+        // the record. Nothing goes to the ladder, so advertising costs a player
+        // nothing but the message itself.
         return true;
     }
 
@@ -1060,12 +1159,13 @@ public final class ChatGuardModule implements Listener {
             String lower = raw.toLowerCase(java.util.Locale.ROOT);
             boolean isKeysFalsePositive = "death-threat".equals(cat) && lower.matches(".*\\bkeys?\\b.*") && (ev.contains("kys") || ev.contains("kill")) && !lower.matches(".*\\b(kill|kys|die|hang|neck|unalive)\\b.*");
             if (!isKeysFalsePositive) {
-                warn(p, "&cThat is not allowed here.");
+                // Advertising-only enforcement: the text is not removed for any
+                // other category. Staff are alerted and the model still learns,
+                // but the message sends and the sign or book line stays.
                 alert("&4" + p.getName() + " &7" + cat + " in &f" + source
                         + " &8(&7" + structural.evidence() + "&8): &f" + raw);
                 this.local.learn(raw, cat, "pattern-" + cat);
-                punishAsync(p, cat, raw, source);
-                return true;
+                return false;
             }
         }
 
@@ -1083,20 +1183,16 @@ public final class ChatGuardModule implements Listener {
         String screened = exempt(raw);
         int hits = termHits(screened);
         if (hits > 0) {
-            // A term repeated inside one piece of text, or one aimed at a named
-            // player, is settled here and never costs an API call.
+            // Advertising-only enforcement: terms alert and train but never
+            // remove the text, and never punish - punishAsync is a no-op for
+            // every non-advertising category, so the call was already inert.
             String target = source.equals("chat") ? targetedAt(p, raw) : null;
-            warn(p, target != null
-                    ? "&cDo not direct that at other players."
-                    : "&cThat is not allowed here.");
-            alert("&c" + p.getName() + " &7blocked text in &f" + source + "&7"
+            alert("&c" + p.getName() + " &7flagged text in &f" + source + "&7"
                     + (target == null ? "" : " targeting &f" + target + "&7")
                     + (hits >= this.repeatFastPath ? " &8(&7" + hits + " hits&8)" : "")
                     + ": &f" + raw);
-            String termCat = termCategory(raw);
-            this.local.learn(raw, termCat, "regex-terms");
-            punishAsync(p, termCat, raw, source);
-            return true;
+            this.local.learn(raw, termCategory(raw), "regex-terms");
+            return false;
         }
 
         // Phonetic engine removed — too many false positives.
@@ -1113,7 +1209,7 @@ public final class ChatGuardModule implements Listener {
         // too, and signs, books and anvil renames get screened like chat.
         if (this.antiAd != null && this.antiAd.scanModeAlways()) {
             AntiAdPipeline.ModelVerdict verdict = this.antiAd.l3ScanEveryMessage(
-                    p.getUniqueId(), raw);
+                    p.getUniqueId(), advertForm(raw));
             if (verdict.flag() && verdict.confidence() >= 0.60D) {
                 this.antiAd.log(p.getName(), source, raw, null, -1.0D,
                         verdict.reasoning(), "flag-model-scan");
@@ -1305,14 +1401,20 @@ public final class ChatGuardModule implements Listener {
     private void punishAsync(Player p, String category, String text, String source,
                              boolean regexConfirmed) {
         final String name = p.getName();
-        final String uuid = p.getUniqueId().toString();
-        final String ip = MuteStore.addressOf(p);
         // ADVERTISING-ONLY MODE: every other category alerts but never punishes.
+        // This guard sits above the address lookup on purpose: `addressOf` reads
+        // and formats the player's socket address, and this method is reached
+        // from `screen()` on the main thread for signs and books, so doing that
+        // work above a guard that always returns for these categories meant a
+        // per-message allocation on the server thread whose result was thrown
+        // away unread.
         if (!CAT_ADVERT.equals(category)) {
             this.plugin.getLogger().info("[TextGuard] " + category + " for " + name
                     + " left unpunished (advertising-only mode).");
             return;
         }
+        final String uuid = p.getUniqueId().toString();
+        final String ip = MuteStore.addressOf(p);
         // Second opinion: an AI advert hit must survive the regex engine on the
         // allowlist/player-name-stripped text before anyone gets muted.
         String advertConfirm = regexConfirmed ? "confirmed" : this.advertDoubleCheck(text);
@@ -1435,12 +1537,35 @@ public final class ChatGuardModule implements Listener {
             // evidence of its own.
             + "\\.([a-z]{2,24})\\b((?:/[a-z0-9._~%+-]*)*)");
     private static final Pattern DOT_WORD = Pattern.compile(
-            "\\s*[\\[(<{]?\\s*(?:dot|d0t|punto|point)\\s*[\\])>}]?\\s*", Pattern.CASE_INSENSITIVE);
+            // Every run is bounded. Unbounded, this was quadratic: on a 1,600
+            // space run it alone cost 8,184 ms of the 9,227 ms advertForm total,
+            // and a 100-page book stalled the main thread past 120 s.
+            "\\s{0,3}[\\[(<{]?\\s{0,3}(?:dot|d0t|punto|point)\\s{0,3}[\\])>}]?\\s{0,3}",
+            Pattern.CASE_INSENSITIVE);
+
+    /**
+     * The most text advertForm will look at, before folding.
+     *
+     * <p>DOMAIN recurses once per label and overflows the stack at roughly
+     * 1,800 labels - about 4,000 characters of dots and single characters - and
+     * nothing on the call path catches it: the regex stage runs before the one
+     * {@code catch (Throwable)} in AntiAdPipeline. 1,024 is a full book page,
+     * the largest text any single surface can hand over, so nothing legitimate
+     * is cut and there is better than 2x margin under the threshold.
+     */
+    private static final int MAX_ADVERT_FORM = 1024;
     private static final Pattern ZERO_WIDTH = Pattern.compile(
             "[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u00AD\\uFEFF\\u180E]");
     private static final Pattern LEET_TOKEN = Pattern.compile("\\b[a-z0-9]+\\b");
     private static final Pattern SPACED_KEYWORD = Pattern.compile(
             "discord|server|invite|website|address");
+    /**
+     * A run of single alphanumerics separated by whitespace - "s e r v e r",
+     * "d i s c o r d", "p l a y". Three characters minimum, so an ordinary
+     * "a b" pair is left alone.
+     */
+    private static final Pattern SPACED_RUN = Pattern.compile(
+            "\\b(?:[a-z0-9]\\s+){2,}[a-z0-9]\\b");
 
     /**
      * Collapses the usual filter dodges before the address patterns run:
@@ -1449,10 +1574,14 @@ public final class ChatGuardModule implements Listener {
      * {@link #normalise} does — an address needs its dots to be an address.
      */
     static String advertForm(String input) {
+        if (input.length() > MAX_ADVERT_FORM) input = input.substring(0, MAX_ADVERT_FORM);
         String s = Normalizer.normalize(input, Normalizer.Form.NFKD)
                              .replaceAll("\\p{M}+", "")
                              .toLowerCase(Locale.ROOT);
         s = ZERO_WIDTH.matcher(s).replaceAll("");
+        // NFKD expands what it is given, so the bound has to be reapplied on the
+        // folded form rather than assumed from the input length.
+        if (s.length() > MAX_ADVERT_FORM * 2) s = s.substring(0, MAX_ADVERT_FORM * 2);
         StringBuilder b = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             Character cy = CYRILLIC.get(s.charAt(i));
@@ -1490,9 +1619,41 @@ public final class ChatGuardModule implements Listener {
         s = s.replaceAll("(?<=[a-z0-9])[,*|;~+](?=[a-z0-9])", ".");
         s = s.replaceAll("\\s*\\.\\s*", ".");
         s = foldKnownLeet(s);
-        String collapsed = s.replaceAll("\\s+", "");
-        if (!collapsed.equals(s) && SPACED_KEYWORD.matcher(collapsed).find()) s = collapsed;
+        s = collapseSpacedKeywords(s);
         return s;
+    }
+
+    /**
+     * Joins runs of single characters - "p l a y . c o o l p v p . x y z" - so
+     * a letter-spaced address is one token again.
+     *
+     * <p>Only single characters are joined, never whole words. This replaced a
+     * stripper that deleted EVERY space in the message as soon as any of
+     * {@code server|discord|invite|website|address} appeared anywhere in it, so
+     * "join play.coolpvp.xyz for free ranks server" was scored as
+     * "joinplay.coolpvp.xyzforfreeranksserver" - three unknown words, 0.0227
+     * where the un-collapsed text scores 0.9718. One ordinary English word was
+     * therefore a complete layer-2 bypass, and the word an advertiser is most
+     * likely to type anyway.
+     *
+     * <p>Letter-spaced text is still joined, whatever else the message holds,
+     * because a run of single characters is joined unconditionally. Joining a
+     * run can only ever create an address for layer one, never hide one: the
+     * separators are dropped, so "p l a y.c o o l p v p" becomes
+     * "play.coolpvp" and not the reverse.
+     */
+    private static String collapseSpacedKeywords(String s) {
+        Matcher runs = SPACED_RUN.matcher(s);
+        StringBuilder out = new StringBuilder(s.length());
+        int last = 0;
+        boolean joined = false;
+        while (runs.find()) {
+            out.append(s, last, runs.start()).append(runs.group().replaceAll("\\s+", ""));
+            last = runs.end();
+            joined = true;
+        }
+        if (!joined) return s;
+        return out.append(s, last, s.length()).toString();
     }
 
     private static String foldKnownLeet(String input) {
@@ -1712,7 +1873,35 @@ public final class ChatGuardModule implements Listener {
     /** The address that was advertised, or null. */
     String advertHit(String raw) {
         String s = advertForm(raw);
+        String typed = typedAdvertHit(raw, s);
+        if (typed != null) return typed;
 
+        String bare = bareAddress(s, this.commonWordSet);
+        if (bare != null && !allowed(bare, "")) {
+            String label = bare.contains(".") ? bare.substring(0, bare.indexOf('.')) : bare;
+            if (isKnownPlayerName(label) || isKnownPlayerName(bare.replace(".", ""))) return null;
+            return bare;
+        }
+        return null;
+    }
+
+    /**
+     * The address a pattern matched outright, or null - never the address
+     * {@link #bareAddress} reconstructs out of ordinary words.
+     *
+     * <p>The two are different kinds of evidence and one caller has to tell them
+     * apart. A dotted quad, a Discord invite and a typed domain are addresses
+     * the player wrote; {@code bareAddress} instead GUESSES where the dots went
+     * among words that are all ordinary English, which is why it needs the
+     * invitation and the common-word test to fire at all. A guess is worth
+     * clearing on a low classifier score and a typed address is not - the same
+     * distinction {@link #credibleHost} already draws with {@code typedDot}.
+     *
+     * <p>Takes the raw text as well as the folded form, because
+     * {@link #credibleHost} decides between a typed dot and a reconstructed one
+     * by looking at what the player actually wrote.
+     */
+    private String typedAdvertHit(String raw, String s) {
         Matcher ip = IPV4.matcher(s);
         while (ip.find()) {
             int a = num(ip.group(1)), b = num(ip.group(2)), c = num(ip.group(3)), d = num(ip.group(4));
@@ -1740,14 +1929,40 @@ public final class ChatGuardModule implements Listener {
             if (allowed(host, path)) continue;
             return host + path;
         }
-
-        String bare = bareAddress(s, this.commonWordSet);
-        if (bare != null && !allowed(bare, "")) {
-            String label = bare.contains(".") ? bare.substring(0, bare.indexOf('.')) : bare;
-            if (isKnownPlayerName(label) || isKnownPlayerName(bare.replace(".", ""))) return null;
-            return bare;
-        }
         return null;
+    }
+
+    /**
+     * Whether what was seen here is an address or a guess about one.
+     *
+     * <p>This is the line between evidence a low classifier score may overrule
+     * and evidence it may not, and it is the only reason the low-confidence
+     * clear exists at all. Everything that survives it is one of:
+     *
+     * <ul>
+     *   <li>a hit {@link #typedAdvertHit} matched outright - an IP the player
+     *       wrote, a Discord invite, a domain that was typed with its dot; or</li>
+     *   <li>a {@code heavy} hit from {@link AdvertContext} - which is to say
+     *       {@code host:port}, a spellable dotless address, or a known server
+     *       name sitting next to something host-shaped. Its own javadoc calls
+     *       host:port "an instant, unconditional block".</li>
+     * </ul>
+     *
+     * <p>What is left for the clear is the light {@code AdvertContext} hits -
+     * "possible server name 'zetro28'" - which are the weakest signal in the
+     * pipeline and are exactly the false positives the clear was added for.
+     *
+     * <h2>Why this exists</h2>
+     * The clear used to apply to everything L1 found. Because L1 is checked
+     * first and its answer is final, that made a 1.8 MB classifier the real
+     * gate: {@code join play.coolpvp.xyz} scores 0.02 and went through
+     * untouched, and so did every address ever handed out, however plainly
+     * written - the pattern had matched, and the score threw it away. Two
+     * layers were required and the weaker one was given the veto.
+     */
+    boolean addressGradeEvidence(String raw, String address, AdvertContext.Hit soft) {
+        if (address != null) return typedAdvertHit(raw, advertForm(raw)) != null;
+        return soft != null && soft.heavy();
     }
 
     /**

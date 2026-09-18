@@ -337,7 +337,14 @@ public final class MillenniumNet {
         int H = this.hidden;
         int w = H * 2;
         this.t = s.length();
-        if (this.t == 0) return 0.5f;
+        // No [a-z0-9']+ tokens at all: pure punctuation, an emoji run, or a
+        // script the tokenizer does not cover. There is no evidence here to
+        // weigh, and 0.5 was not a neutral answer - it landed inside the
+        // 0.40-0.85 band, so these messages were escalated to L3 and could be
+        // flagged by rule 2 on the strength of the surrounding lines alone,
+        // having said nothing themselves. Return the clear end, the same
+        // fail-open direction the rest of this layer takes.
+        if (this.t == 0) return 0f;
         allocate();
 
         // ---- embeddings: word row + mean of gram rows --------------------

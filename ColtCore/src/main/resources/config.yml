@@ -804,9 +804,12 @@ chat-guard:
   context:
     enabled: true
     log-drops: false
-  # DELETE the offending message. Chat is cancelled before anyone sees it, and
-  # the same applies to signs, books and anvil renames - the sign is never
-  # placed and the rename never applies.
+  # REMOVE the offending text, and punish nobody for advertising.
+  # Chat is cancelled before anyone sees it and an anvil rename is refused. A
+  # sign's bad line is cleared and the sign still places; a book's bad line is
+  # cleared and the book is still written. The sender is warned and staff are
+  # alerted either way, but no mute ladder runs for advertising.
+  # Retained for compatibility: chat is cancelled regardless of this value.
   cancel-message: true
   # This many matches of a term inside ONE message settles it by regex alone.
   repeat-fast-path: 2

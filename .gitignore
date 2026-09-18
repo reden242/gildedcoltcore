@@ -1,4 +1,27 @@
 # Everything not part of the two plugins + docs is workspace scratch.
+#
+# The rule below is a deny-all with an explicit allow-list, so only the two
+# plugin trees, the antiad training directory and the docs are tracked - 130
+# files out of roughly 23,000 in the workspace.
+#
+# What that means in practice: the other ~22,870 files are excluded by
+# inference from `*`, not by any rule that names them. They are genuinely
+# absent from the repository, but a `git log`/`git grep`-based secret or
+# vulnerability sweep will see only the 130 tracked files and report a clean
+# result on a workspace it never looked at. Scan the filesystem, not the
+# history, when auditing this workspace.
+#
+# Named here so the exclusions are visible rather than derived:
+#
+#   base/                          local scratch tree, cheat research
+#   GildedCore-final/com/kammoun/  decompiled third-party dump (~14,400 files)
+#   ColtCore/diag/                 generated diagnostics, wrong package name
+#   verify-temp*/                  scratch verification builds
+#   antiad/classes/                compiled scratch output for the trainers
+#   */target/                      Maven build output
+#
+# If any of those ever needs to ship, add an explicit `!` allow-list entry
+# for it, the way the plugin trees below are handled.
 *
 !ColtCore/
 !ColtCore/src/

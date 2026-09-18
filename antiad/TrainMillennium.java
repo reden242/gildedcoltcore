@@ -75,6 +75,23 @@ public final class TrainMillennium {
     private static final double BAND_LO = 0.40;
     private static final double BAND_HI = 0.85;
 
+    // ---- corpus ---------------------------------------------------------
+    /**
+     * The de-biased corpus pair, written by {@code antiad/build_corpus_v2.py}
+     * from the same three inputs this file used to read directly. The v1 files
+     * are left in place untouched; they are the corpus the defect was measured
+     * on and the numbers in the README are theirs.
+     *
+     * <p>{@code chat_corpus.txt} is no longer loaded here. The v2 pair already
+     * carries the chat log - that is the point of "marker-opening negatives
+     * mined from real chat" - and loading it twice would put 11,663 clean rows
+     * on one side of a class balance it is meant to be part of. Folding it in
+     * is also what lets the dozen lines of an "all clean" log that are in fact
+     * adverts be excluded instead of taught as clean; the generator lists them.
+     */
+    private static final Path SEED_CORPUS = Paths.get("antiad/seed_corpus.v2.tsv");
+    private static final Path TLD_CORPUS = Paths.get("antiad/tld_corpus.v2.tsv");
+
     public static void main(String[] args) throws Exception {
         String mode = args.length > 0 ? args[0].toLowerCase(Locale.ROOT) : "train";
         if ("gradcheck".equals(mode)) {
@@ -358,26 +375,177 @@ public final class TrainMillennium {
     private static void validationSplit(List<String> texts, List<Float> labels) throws IOException {
         List<String> all = new ArrayList<>();
         List<Float> allLabels = new ArrayList<>();
-        loadTsv(Paths.get("antiad/seed_corpus.tsv"), all, allLabels);
-        loadTsv(Paths.get("antiad/tld_corpus.tsv"), all, allLabels);
-        loadClean(Paths.get("chat_corpus.txt"), all, allLabels);
+        loadTsv(SEED_CORPUS, all, allLabels);
+        loadTsv(TLD_CORPUS, all, allLabels);
+        List<Integer> trainIdx = new ArrayList<>();
+        List<Integer> valIdx = new ArrayList<>();
+        int dropped = splitIndices(all, allLabels, trainIdx, valIdx);
+        System.out.printf("validation: dropped %d of %d candidate rows as near-duplicates "
+                + "of a training row%n", dropped, valIdx.size() + dropped);
+        for (int i : valIdx) {
+            texts.add(all.get(i));
+            labels.add(allLabels.get(i));
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Split                                                              */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Deterministic stratified split, plus the near-duplicate guard below.
+     *
+     * <p>Shared by {@link #train} and {@link #validationSplit} so the two can
+     * never drift: an {@code eval} run that measured a different held-out set
+     * than the gates did would report calibration for a model nobody trained.
+     *
+     * @return how many candidate validation rows the guard removed
+     */
+    private static int splitIndices(List<String> texts, List<Float> labels,
+                                    List<Integer> trainIdx, List<Integer> valIdx) {
         List<Integer> pos = new ArrayList<>();
         List<Integer> neg = new ArrayList<>();
-        for (int i = 0; i < allLabels.size(); i++) {
-            if (allLabels.get(i) > 0.5f) pos.add(i);
+        for (int i = 0; i < labels.size(); i++) {
+            if (labels.get(i) > 0.5f) pos.add(i);
             else neg.add(i);
         }
         Collections.shuffle(pos, new Random(SEED));
         Collections.shuffle(neg, new Random(SEED + 1));
         int posVal = (int) (pos.size() * VAL_FRACTION);
         int negVal = (int) (neg.size() * VAL_FRACTION);
-        List<Integer> valIdx = new ArrayList<>(pos.subList(0, posVal));
+        valIdx.addAll(pos.subList(0, posVal));
         valIdx.addAll(neg.subList(0, negVal));
+        trainIdx.addAll(pos.subList(posVal, pos.size()));
+        trainIdx.addAll(neg.subList(negVal, neg.size()));
+        int dropped = dropNearDuplicates(texts, valIdx);
         Collections.sort(valIdx);
-        for (int i : valIdx) {
-            texts.add(all.get(i));
-            labels.add(allLabels.get(i));
+        Collections.sort(trainIdx);
+        return dropped;
+    }
+
+    /**
+     * Removes from the candidate validation set every row that shares a
+     * normalised text, or a 3-gram Jaccard of 0.8 or more, with any other row
+     * of the corpus.
+     *
+     * <p>The split used to stratify by label and nothing else, so 26.2% of the
+     * old held-out set had its exact text in the training half and 334 of the
+     * 2,733 val rows longer than 20 characters were duplicated outright. The
+     * gates were therefore partly measuring memorisation. The guard matches
+     * against the <em>whole</em> corpus rather than against the training half
+     * alone: a val row whose twin is another val row has to go too, because the
+     * moment it is kept its twin's presence in train is a leak again, and
+     * deciding that per-row would make the result depend on visitation order.
+     * Matching against everything makes the kept set exactly "rows that occur
+     * once", which no ordering can change.
+     *
+     * @return how many candidate rows were removed
+     */
+    private static int dropNearDuplicates(List<String> texts, List<Integer> valIdx) {
+        final int n = texts.size();
+        String[] norms = new String[n];
+        int[][] grams = new int[n][];
+        for (int i = 0; i < n; i++) {
+            norms[i] = normalise(texts.get(i));
+            grams[i] = trigrams(norms[i]);
         }
+        Map<Integer, List<Integer>> index = new HashMap<>();
+        Map<String, Integer> textCount = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            textCount.merge(norms[i], 1, Integer::sum);
+            for (int g : grams[i]) {
+                index.computeIfAbsent(g, k -> new ArrayList<>()).add(i);
+            }
+        }
+
+        int[] shared = new int[n];
+        int[] stamp = new int[n];
+        int tick = 0;
+        List<Integer> kept = new ArrayList<>(valIdx.size());
+        int dropped = 0;
+        for (int v : valIdx) {
+            if (textCount.get(norms[v]) > 1) {
+                dropped++;
+                continue;
+            }
+            int[] a = grams[v];
+            if (a.length == 0) {
+                kept.add(v);
+                continue;
+            }
+            tick++;
+            List<Integer> touched = new ArrayList<>();
+            for (int g : a) {
+                List<Integer> rows = index.get(g);
+                if (rows == null) continue;
+                for (int t : rows) {
+                    if (t == v) continue;
+                    if (stamp[t] != tick) {
+                        stamp[t] = tick;
+                        shared[t] = 0;
+                        touched.add(t);
+                    }
+                    shared[t]++;
+                }
+            }
+            boolean dup = false;
+            for (int t : touched) {
+                // A Jaccard of 0.8 needs |A n B| >= (0.8/1.8) * (|A| + |B|);
+                // anything below that cannot reach the threshold, and for the
+                // short rows that dominate this corpus it skips almost
+                // everything before the set arithmetic.
+                if (shared[t] * 9 < 4 * (a.length + grams[t].length)) continue;
+                int union = a.length + grams[t].length - shared[t];
+                if (union > 0 && (double) shared[t] / union >= 0.8) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (dup) dropped++;
+            else kept.add(v);
+        }
+        valIdx.clear();
+        valIdx.addAll(kept);
+        return dropped;
+    }
+
+    /**
+     * Lowercased, punctuation dropped, whitespace collapsed - the same
+     * character class {@code MillenniumNet.tokenize} keeps, so two messages
+     * that the model cannot tell apart normalise together.
+     */
+    private static String normalise(String text) {
+        StringBuilder sb = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = Character.toLowerCase(text.charAt(i));
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '\'') {
+                sb.append(c);
+            } else if (sb.length() > 0 && sb.charAt(sb.length() - 1) != ' ') {
+                sb.append(' ');
+            }
+        }
+        while (sb.length() > 0 && sb.charAt(sb.length() - 1) == ' ') {
+            sb.setLength(sb.length() - 1);
+        }
+        return sb.toString();
+    }
+
+    /** Distinct hashed 3-grams of a normalised message, ascending. */
+    private static int[] trigrams(String norm) {
+        if (norm.isEmpty()) return new int[0];
+        String[] w = norm.split(" ");
+        int count = w.length - 2;
+        if (count <= 0) return new int[0];
+        int[] out = new int[count];
+        for (int i = 0; i < count; i++) {
+            out[i] = MillenniumNet.hash32(w[i] + " " + w[i + 1] + " " + w[i + 2]);
+        }
+        java.util.Arrays.sort(out);
+        int m = 1;
+        for (int i = 1; i < out.length; i++) {
+            if (out[i] != out[m - 1]) out[m++] = out[i];
+        }
+        return m == out.length ? out : java.util.Arrays.copyOf(out, m);
     }
 
     /* ------------------------------------------------------------------ */
@@ -494,9 +662,8 @@ public final class TrainMillennium {
     private static void train(Path out) throws Exception {
         List<String> texts = new ArrayList<>();
         List<Float> labels = new ArrayList<>();
-        loadTsv(Paths.get("antiad/seed_corpus.tsv"), texts, labels);
-        loadTsv(Paths.get("antiad/tld_corpus.tsv"), texts, labels);
-        loadClean(Paths.get("chat_corpus.txt"), texts, labels);
+        loadTsv(SEED_CORPUS, texts, labels);
+        loadTsv(TLD_CORPUS, texts, labels);
         System.out.printf("corpus: %d samples (%d advertising, %d clean)%n",
                 texts.size(), countPositive(labels), labels.size() - countPositive(labels));
         if (texts.isEmpty()) {
@@ -504,23 +671,12 @@ public final class TrainMillennium {
             System.exit(2);
         }
 
-        // Deterministic split, stratified so both halves keep the class balance.
-        List<Integer> pos = new ArrayList<>();
-        List<Integer> neg = new ArrayList<>();
-        for (int i = 0; i < labels.size(); i++) {
-            if (labels.get(i) > 0.5f) pos.add(i);
-            else neg.add(i);
-        }
-        Collections.shuffle(pos, new Random(SEED));
-        Collections.shuffle(neg, new Random(SEED + 1));
-        int posVal = (int) (pos.size() * VAL_FRACTION);
-        int negVal = (int) (neg.size() * VAL_FRACTION);
-        List<Integer> valIdx = new ArrayList<>(pos.subList(0, posVal));
-        valIdx.addAll(neg.subList(0, negVal));
-        List<Integer> trainIdx = new ArrayList<>(pos.subList(posVal, pos.size()));
-        trainIdx.addAll(neg.subList(negVal, neg.size()));
-        Collections.sort(valIdx);
-        Collections.sort(trainIdx);
+        // Deterministic stratified split with the near-duplicate guard. Shared
+        // with validationSplit() so `eval` cannot report calibration for a
+        // held-out set the gates never used.
+        List<Integer> trainIdx = new ArrayList<>();
+        List<Integer> valIdx = new ArrayList<>();
+        int dropped = splitIndices(texts, labels, trainIdx, valIdx);
 
         List<String> trainTexts = new ArrayList<>(trainIdx.size());
         List<Float> trainLabels = new ArrayList<>(trainIdx.size());
@@ -534,7 +690,8 @@ public final class TrainMillennium {
             valTexts.add(texts.get(i));
             valLabels.add(labels.get(i));
         }
-        System.out.printf("split: %d train / %d validation%n", trainTexts.size(), valTexts.size());
+        System.out.printf("split: %d train / %d validation (%d candidate rows dropped as "
+                + "near-duplicates)%n", trainTexts.size(), valTexts.size(), dropped);
 
         List<String> vocab = buildVocab(trainTexts, MIN_COUNT);
         int vocabSize = vocab.size() + 1;

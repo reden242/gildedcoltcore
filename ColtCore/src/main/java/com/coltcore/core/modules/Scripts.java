@@ -208,7 +208,8 @@ public final class Scripts {
      * behind that.
      */
     private static final java.util.regex.Pattern INVISIBLE = java.util.regex.Pattern.compile(
-            "[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u00AD\uFEFF\u180E]");
+            "[\u200B-\u200F\u202A-\u202E\u2060-\u2065\u00AD\uFEFF\u180E\uFFF9-\uFFFB"
+                    + "\\x{13430}-\\x{1343F}\\x{E0001}\\x{E0020}-\\x{E007F}]");
 
     /**
      * Fullwidth and mathematical letterforms folded to plain ASCII.
@@ -234,10 +235,31 @@ public final class Scripts {
         if (input == null || input.isEmpty()) return "";
         Script script = detect(input);
 
+        // Strip the invisibles FIRST, before the normaliser and before every
+        // fold below. The class is Unicode format (Cf) characters with no
+        // compatibility decomposition, so NFKD and NFKC both pass them straight
+        // through and stripping before or after the normaliser removes the same
+        // set; it is done first because the steps that follow are order
+        // sensitive. NFKC will not compose a base with its mark across an
+        // intervening format character, which leaves the mark orphaned for the
+        // \p{M} strip to delete, and the flipped>=2 branch below reverses the
+        // whole string, so a survivor would be carried into the reversed
+        // skeleton and land between its letters as well. Removing them first
+        // means every fold sees the string the reader sees.
+        //
+        // The bidi controls (U+202A-U+202E) are in this set deliberately. They
+        // are text-direction controls rather than noise, but nothing renders the
+        // result of this method: every call site is a term match, a term
+        // compile, a duplicate/similarity key or a hashed model feature, and the
+        // player's own message is shown from the raw string. Stripping them here
+        // changes no display; it only stops a direction control from splitting a
+        // term inside the skeleton.
+        String visible = INVISIBLE.matcher(input).replaceAll("");
+
         // NFKC for non-Latin: it still unifies compatibility forms (Arabic
         // presentation forms, full-width Latin) without decomposing vowels into
         // separate marks that the next step would then delete.
-        String s = Normalizer.normalize(input,
+        String s = Normalizer.normalize(visible,
                 script.keepsMarks() ? Normalizer.Form.NFKC : Normalizer.Form.NFKD);
         if (!script.keepsMarks()) s = s.replaceAll("\\p{M}+", "");
         if (script.cased() || script == Script.LATIN) s = s.toLowerCase(Locale.ROOT);
@@ -276,6 +298,13 @@ public final class Scripts {
      */
     public static String words(String input) {
         if (input == null || input.isEmpty()) return "";
+        // Strip the invisible blocks first. Everything below treats a character
+        // that is not a letter, a digit or a combining mark as a separator, so a
+        // zero-width character inside a word was becoming a space and splitting
+        // the word into single letters - which is how "f<ZWSP>a<ZWSP>g" walked
+        // past the short-term matcher.
+        input = INVISIBLE.matcher(input).replaceAll("");
+        if (input.isEmpty()) return "";
         Script script = detect(input);
         String s = Normalizer.normalize(input,
                 script.keepsMarks() ? Normalizer.Form.NFKC : Normalizer.Form.NFKD);
