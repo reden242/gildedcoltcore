@@ -1556,6 +1556,149 @@ daily-rewards:
       commands:
         - 'eco give %player% 100000'
         - 'crate give %player% amethyst 1'
+    day-8:
+      day: 8
+      enabled: true
+      commands:
+        - 'eco give %player% 110000'
+        - 'crate give %player% common 3'
+    day-9:
+      day: 9
+      enabled: true
+      commands:
+        - 'eco give %player% 120000'
+        - 'crate give %player% gold 1'
+    day-10:
+      day: 10
+      enabled: true
+      commands:
+        - 'eco give %player% 130000'
+        - 'crate give %player% crimson 1'
+    day-11:
+      day: 11
+      enabled: true
+      commands:
+        - 'eco give %player% 140000'
+        - 'crate give %player% gold 2'
+    day-12:
+      day: 12
+      enabled: true
+      commands:
+        - 'eco give %player% 150000'
+        - 'crate give %player% prime 1'
+    day-13:
+      day: 13
+      enabled: true
+      commands:
+        - 'eco give %player% 160000'
+        - 'crate give %player% crimson 2'
+    day-14:
+      day: 14
+      enabled: true
+      commands:
+        - 'eco give %player% 200000'
+        - 'crate give %player% amethyst 1'
+        - 'crate give %player% prime 1'
+    day-15:
+      day: 15
+      enabled: true
+      commands:
+        - 'eco give %player% 180000'
+        - 'crate give %player% gold 2'
+    day-16:
+      day: 16
+      enabled: true
+      commands:
+        - 'eco give %player% 185000'
+        - 'crate give %player% crimson 2'
+    day-17:
+      day: 17
+      enabled: true
+      commands:
+        - 'eco give %player% 200000'
+        - 'crate give %player% prime 1'
+    day-18:
+      day: 18
+      enabled: true
+      commands:
+        - 'eco give %player% 210000'
+        - 'crate give %player% gold 3'
+    day-19:
+      day: 19
+      enabled: true
+      commands:
+        - 'eco give %player% 225000'
+        - 'crate give %player% crimson 2'
+    day-20:
+      day: 20
+      enabled: true
+      commands:
+        - 'eco give %player% 240000'
+        - 'crate give %player% prime 2'
+    day-21:
+      day: 21
+      enabled: true
+      commands:
+        - 'eco give %player% 300000'
+        - 'crate give %player% amethyst 1'
+        - 'crate give %player% crimson 2'
+    day-22:
+      day: 22
+      enabled: true
+      commands:
+        - 'eco give %player% 260000'
+        - 'crate give %player% gold 3'
+    day-23:
+      day: 23
+      enabled: true
+      commands:
+        - 'eco give %player% 275000'
+        - 'crate give %player% prime 2'
+    day-24:
+      day: 24
+      enabled: true
+      commands:
+        - 'eco give %player% 290000'
+        - 'crate give %player% crimson 3'
+    day-25:
+      day: 25
+      enabled: true
+      commands:
+        - 'eco give %player% 300000'
+        - 'crate give %player% amethyst 1'
+    day-26:
+      day: 26
+      enabled: true
+      commands:
+        - 'eco give %player% 325000'
+        - 'crate give %player% prime 2'
+    day-27:
+      day: 27
+      enabled: true
+      commands:
+        - 'eco give %player% 350000'
+        - 'crate give %player% crimson 3'
+    day-28:
+      day: 28
+      enabled: true
+      commands:
+        - 'eco give %player% 400000'
+        - 'crate give %player% amethyst 1'
+        - 'crate give %player% prime 1'
+    day-29:
+      day: 29
+      enabled: true
+      commands:
+        - 'eco give %player% 450000'
+        - 'crate give %player% amethyst 1'
+        - 'crate give %player% crimson 2'
+    day-30:
+      day: 30
+      enabled: true
+      commands:
+        - 'eco give %player% 500000'
+        - 'crate give %player% amethyst 2'
+        - 'crate give %player% prime 1'
 
 playtime-rewards:
   # Cumulative playtime, counted in whole hours from Bukkit's own statistic, so
