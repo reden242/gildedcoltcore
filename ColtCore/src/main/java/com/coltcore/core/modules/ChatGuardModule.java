@@ -2136,7 +2136,7 @@ public final class ChatGuardModule implements Listener {
      * Your own addresses, so telling someone the server IP is fine.
      *
      * A bare domain in the allow list also covers its subdomains. An entry with
-     * a path ("discord.gg/gildedmc") only covers that path, so your own invite
+     * a path ("discord.gg/coltcore") only covers that path, so your own invite
      * is fine while every other invite on the same host is still advertising.
      */
     private boolean allowed(String host, String path) {
