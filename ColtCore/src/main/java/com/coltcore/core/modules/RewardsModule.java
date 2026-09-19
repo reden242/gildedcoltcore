@@ -183,6 +183,11 @@ public final class RewardsModule {
         return selected;
     }
 
+    /** The daily entry the GUI shows for a streak, or null when unconfigured. */
+    public Reward dailyRewardFor(int streak) {
+        return dailyReward(Math.max(1, streak));
+    }
+
     public List<Reward> playtimeRewards() {
         return configured("playtime-rewards.rewards", "hours");
     }

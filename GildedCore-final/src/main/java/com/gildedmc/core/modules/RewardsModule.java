@@ -184,7 +184,12 @@ public final class RewardsModule {
         return selected;
     }
 
-    private List<Reward> playtimeRewards() {
+    /** The daily entry the GUI shows for a streak, or null when unconfigured. */
+    public Reward dailyRewardFor(int streak) {
+        return dailyReward(Math.max(1, streak));
+    }
+
+    public List<Reward> playtimeRewards() {
         return configured("playtime-rewards.rewards", "hours");
     }
 
@@ -231,6 +236,11 @@ public final class RewardsModule {
         return "players." + player.getUniqueId();
     }
 
-    private record Reward(String id, long threshold, List<String> commands) {
+    public record Reward(String id, long threshold, List<String> commands) {
+    }
+
+    /** Player persistence, for GUI read-outs. */
+    public FileConfiguration getData() {
+        return this.data;
     }
 }

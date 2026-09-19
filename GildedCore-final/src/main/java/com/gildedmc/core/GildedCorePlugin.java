@@ -68,6 +68,8 @@ import com.gildedmc.core.modules.ReviewGui;
 import com.gildedmc.core.modules.RedeemCodeModule;
 import com.gildedmc.core.modules.EntityLimitModule;
 import com.gildedmc.core.modules.RewardsModule;
+import com.gildedmc.core.modules.JoinRewardModule;
+import com.gildedmc.core.modules.RewardsGui;
 import com.gildedmc.core.modules.ReviewModule;
 import com.gildedmc.core.modules.ConsoleGuard;
 import com.gildedmc.core.modules.FlagReviewStore;
@@ -221,6 +223,8 @@ implements Listener {
     private ReviewModule reviewModule;
     private RedeemCodeModule redeemModule;
     private RewardsModule rewardsModule;
+    private RewardsGui rewardsGui;
+    private JoinRewardModule joinRewardModule;
     private EntityLimitModule entityLimitModule;
     private ConsoleGuard consoleGuard;
     private JoinPacketIsolation joinPacketIsolation;
@@ -304,6 +308,12 @@ implements Listener {
         this.redeemModule.setCreatorGate(this::isManagerPlus);
         this.rewardsModule = new RewardsModule(this);
         this.rewardsModule.enable();
+        this.rewardsGui = new RewardsGui(this.rewardsModule);
+        this.rewardsGui.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.rewardsGui, (Plugin)this);
+        this.joinRewardModule = new JoinRewardModule(this);
+        this.joinRewardModule.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.joinRewardModule, (Plugin)this);
         // Chunk entity cap, minecart refund and machine-launch refusal. Silent
         // to players by design; staff alerts go to the console.
         this.entityLimitModule = new EntityLimitModule(this);
@@ -323,6 +333,18 @@ implements Listener {
         if (this.reviewGui == null) return true;
         this.reviewGui.openGui(viewer);
         return true;
+    }
+
+    /**
+     * /rewards with no arguments opens the click GUI; anything else runs the
+     * text subcommands (daily, playtime, claimall, status, reload).
+     */
+    private boolean openRewards(CommandSender sender, String[] args) {
+        if (args.length == 0 && sender instanceof Player player && this.rewardsGui != null) {
+            this.rewardsGui.openGui(player);
+            return true;
+        }
+        return this.rewardsModule.command(sender, args);
     }
 
     /** Points a command declared in plugin.yml back at this plugin's onCommand. */
@@ -391,6 +413,8 @@ implements Listener {
         if (this.diagnosticsModule != null) this.diagnosticsModule.disable();
         if (this.reviewModule != null) this.reviewModule.disable();
         if (this.rewardsModule != null) this.rewardsModule.disable();
+        if (this.rewardsGui != null) this.rewardsGui.disable();
+        if (this.joinRewardModule != null) this.joinRewardModule.disable();
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
         if (this.consoleGuard != null) this.consoleGuard.disable();
         if (this.antiAdPipeline != null) this.antiAdPipeline.disable();
@@ -429,7 +453,7 @@ implements Listener {
             case "playerwipe" -> this.playerWipeModule.command(sender, args);
             case "review" -> this.reviewModule.command(sender, args);
             case "flagreview" -> openFlagReview(sender);
-            case "rewards", "dailyrewards", "playtimerewards" -> this.rewardsModule.command(sender, args);
+            case "rewards", "dailyrewards", "playtimerewards" -> openRewards(sender, args);
             case "redeem" -> this.redeemModule.redeem(sender, args);
             case "redeemcode" -> this.redeemModule.admin(sender, args);
             default -> false;

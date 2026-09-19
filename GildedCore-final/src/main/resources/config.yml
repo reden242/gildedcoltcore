@@ -1639,17 +1639,44 @@ daily-rewards:
       day: 1
       enabled: true
       commands:
-        - 'eco give %player% 250'
+        - 'eco give %player% 15000'
+        - 'crate give %player% common 1'
+    day-2:
+      day: 2
+      enabled: true
+      commands:
+        - 'eco give %player% 20000'
+        - 'crate give %player% common 1'
     day-3:
       day: 3
       enabled: true
       commands:
-        - 'eco give %player% 500'
+        - 'eco give %player% 30000'
+        - 'crate give %player% common 2'
+    day-4:
+      day: 4
+      enabled: true
+      commands:
+        - 'eco give %player% 40000'
+        - 'crate give %player% gold 1'
+    day-5:
+      day: 5
+      enabled: true
+      commands:
+        - 'eco give %player% 50000'
+        - 'crate give %player% amethyst 1'
+    day-6:
+      day: 6
+      enabled: true
+      commands:
+        - 'eco give %player% 75000'
+        - 'crate give %player% prime 1'
     day-7:
       day: 7
       enabled: true
       commands:
-        - 'crate give %player% common 1'
+        - 'eco give %player% 100000'
+        - 'crate give %player% crimson 1'
 
 # /rewards playtime claims each threshold once. Playtime is the server's own
 # PLAY_ONE_MINUTE statistic (genuine tick time); no external playtime plugin is
@@ -1662,17 +1689,44 @@ playtime-rewards:
       hours: 1
       enabled: true
       commands:
-        - 'eco give %player% 500'
+        - 'eco give %player% 1000'
+        - 'crate give %player% common 1'
     five-hours:
       hours: 5
       enabled: true
       commands:
         - 'crate give %player% common 1'
-    twenty-hours:
-      hours: 20
+        - 'shard give %player% 10'
+    ten-hours:
+      hours: 10
       enabled: true
       commands:
-        - 'crate give %player% rare 1'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 50'
+    twenty-five-hours:
+      hours: 25
+      enabled: true
+      commands:
+        - 'crate give %player% gold 1'
+        - 'shard give %player% 100'
+    fifty-hours:
+      hours: 50
+      enabled: true
+      commands:
+        - 'crate give %player% amethyst 1'
+    hundred-hours:
+      hours: 100
+      enabled: true
+      commands:
+        - 'crate give %player% prime 1'
+
+join-rewards:
+  # One-time welcome grant on first join, handled by its own module.
+  # Placeholders: %player% %uuid%
+  enabled: true
+  message: '&aWelcome! &fHere is &a$10,000 &fto start you off.'
+  commands:
+    - 'eco give %player% 10000'
 
 # Each reward command is run by console. Available placeholders:
 # %player%, %uuid%, %reward%, %streak% and %hours%.

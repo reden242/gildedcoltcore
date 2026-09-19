@@ -6,7 +6,7 @@
 
   <groupId>com.coltcore</groupId>
   <artifactId>ColtCore</artifactId>
-  <version>1.12.0</version>
+  <version>1.14.0</version>
   <packaging>jar</packaging>
 
   <properties>
