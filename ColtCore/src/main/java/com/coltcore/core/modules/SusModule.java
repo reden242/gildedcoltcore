@@ -66,6 +66,16 @@ public final class SusModule implements Listener {
     private static final Pattern ANGLE =
             Pattern.compile("(?i)\\b([A-Z]+)\\s+AG\\s*>\\s*(\\S+)\\s+([A-Za-z]+)\\s*\\((\\d+)\\s*/\\s*(\\d+)\\)");
 
+    /**
+     * BaritoneRemover's check names, from its own source
+     * (github.com/ChromMob/BaritoneRemover): CombinedA, AutoWalkA,
+     * RepeatedB, RepeatedD, Cinematic, RepeatedA, RepeatedC, TargetLockA-D,
+     * TimeBetweenA/B. Matched exactly so a baritone line attributes the
+     * right check instead of a best-effort guess.
+     */
+    private static final Pattern BARITONE_CHECK = Pattern.compile(
+            "(?i)\\b(CombinedA|AutoWalkA|Repeated[ABCD]|Cinematic|TargetLock[A-D]|TimeBetween[AB])\\b");
+
     private final JavaPlugin plugin;
     private Handler handler;
     private final Deque<Entry> live = new ArrayDeque<>();
@@ -196,7 +206,7 @@ public final class SusModule implements Listener {
             return;
         }
         if (lower.contains("baritone")) {
-            Entry parsed = generic(line, "BaritoneRemover");
+            Entry parsed = baritone(line);
             if (parsed != null) record(parsed);
             return;
         }
@@ -211,6 +221,33 @@ public final class SusModule implements Listener {
             Entry parsed = generic(line, "Kratos");
             if (parsed != null) record(parsed);
         }
+    }
+
+    /**
+     * BaritoneRemover lines carry one of its known check names; the player
+     * is the name-like token nearest before or after it.
+     */
+    private static Entry baritone(String line) {
+        String text = line.replaceAll("\\[\\d{2}:\\d{2}:\\d{2}.*?\\]:\\s*", "").trim();
+        Matcher check = BARITONE_CHECK.matcher(text);
+        if (!check.find()) return generic(line, "BaritoneRemover");
+        String checkName = check.group(1);
+        List<String> names = new ArrayList<>();
+        Matcher tokens = Pattern.compile("[A-Za-z0-9_]{3,16}").matcher(text);
+        while (tokens.find()) {
+            String token = tokens.group();
+            if (!isNoise(token) && !token.equalsIgnoreCase(checkName)) names.add(token);
+        }
+        if (names.isEmpty()) return null;
+        String player = names.get(0);
+        int pos = text.indexOf(checkName);
+        for (String candidate : names) {
+            int at = text.indexOf(candidate);
+            if (at >= 0 && Math.abs(at - pos) < Math.abs(text.indexOf(player) - pos)) {
+                player = candidate;
+            }
+        }
+        return new Entry(System.currentTimeMillis(), "BaritoneRemover", player, checkName, "", text);
     }
 
     /**
