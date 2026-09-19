@@ -1585,7 +1585,7 @@ daily-rewards:
       enabled: true
       commands:
         - 'eco give %player% 150000'
-        - 'crate give %player% prime 1'
+        - 'crate give %player% crimson 1'
     day-13:
       day: 13
       enabled: true
@@ -1598,7 +1598,6 @@ daily-rewards:
       commands:
         - 'eco give %player% 200000'
         - 'crate give %player% amethyst 1'
-        - 'crate give %player% prime 1'
     day-15:
       day: 15
       enabled: true
@@ -1616,7 +1615,7 @@ daily-rewards:
       enabled: true
       commands:
         - 'eco give %player% 200000'
-        - 'crate give %player% prime 1'
+        - 'crate give %player% gold 3'
     day-18:
       day: 18
       enabled: true
@@ -1634,7 +1633,7 @@ daily-rewards:
       enabled: true
       commands:
         - 'eco give %player% 240000'
-        - 'crate give %player% prime 2'
+        - 'crate give %player% crimson 3'
     day-21:
       day: 21
       enabled: true
@@ -1653,7 +1652,7 @@ daily-rewards:
       enabled: true
       commands:
         - 'eco give %player% 275000'
-        - 'crate give %player% prime 2'
+        - 'crate give %player% crimson 3'
     day-24:
       day: 24
       enabled: true
@@ -1665,13 +1664,13 @@ daily-rewards:
       enabled: true
       commands:
         - 'eco give %player% 300000'
-        - 'crate give %player% amethyst 1'
+        - 'crate give %player% crimson 2'
     day-26:
       day: 26
       enabled: true
       commands:
         - 'eco give %player% 325000'
-        - 'crate give %player% prime 2'
+        - 'crate give %player% prime 1'
     day-27:
       day: 27
       enabled: true
@@ -1684,20 +1683,18 @@ daily-rewards:
       commands:
         - 'eco give %player% 400000'
         - 'crate give %player% amethyst 1'
-        - 'crate give %player% prime 1'
     day-29:
       day: 29
       enabled: true
       commands:
         - 'eco give %player% 450000'
-        - 'crate give %player% amethyst 1'
-        - 'crate give %player% crimson 2'
+        - 'crate give %player% crimson 3'
     day-30:
       day: 30
       enabled: true
       commands:
         - 'eco give %player% 500000'
-        - 'crate give %player% amethyst 2'
+        - 'crate give %player% amethyst 1'
         - 'crate give %player% prime 1'
 
 playtime-rewards:
