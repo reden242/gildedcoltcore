@@ -38,10 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * next detection better, which is the opposite of a model marking its own work.
  *
  * <h2>Who is eligible</h2>
- * Holders of {@code gildedcore.review} — meant for admin and above — who are
- * <b>not currently flagged AFK</b> by {@link StaffMacroModule}. Somebody whose
- * input is a machine loop is by definition not reading chat; handing them the
- * queue would either stall it or harvest a rubber stamp from a macro. If nobody
+ * Holders of {@code gildedcore.review} — meant for admin and above. If nobody
  * is eligible, the configured fallback decides, and by default that is to apply
  * the punishment exactly as it would have been without this module.
  *
@@ -57,7 +54,6 @@ public final class ReviewModule {
     public enum Fallback { APPLY, DROP, ESCALATE }
 
     private final JavaPlugin plugin;
-    private final StaffMacroModule macro;
     private final LocalAiModule local;
 
     private boolean enabled;
@@ -71,9 +67,8 @@ public final class ReviewModule {
     private final AtomicInteger nextId = new AtomicInteger(1);
     private SchedulerCompat.ManagedTask task;
 
-    public ReviewModule(JavaPlugin plugin, StaffMacroModule macro, LocalAiModule local) {
+    public ReviewModule(JavaPlugin plugin, LocalAiModule local) {
         this.plugin = plugin;
-        this.macro = macro;
         this.local = local;
     }
 
@@ -160,12 +155,11 @@ public final class ReviewModule {
     /*  Eligibility                                                       */
     /* ------------------------------------------------------------------ */
 
-    /** Reviewers who could answer right now: permitted, online, and not AFK. */
+    /** Reviewers who could answer right now: permitted and online. */
     public List<Player> availableReviewers() {
         List<Player> out = new ArrayList<>();
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (!p.hasPermission(PERM)) continue;
-            if (this.macro != null && this.macro.isFlaggedAfk(p)) continue;
             out.add(p);
         }
         return out;
@@ -329,11 +323,6 @@ public final class ReviewModule {
         }
         if (p.settled) {
             reviewer.sendMessage(UiKit.colour("&eReview #" + id + " was already decided."));
-            return null;
-        }
-        if (reviewer instanceof Player rp && this.macro != null && this.macro.isFlaggedAfk(rp)) {
-            reviewer.sendMessage(UiKit.colour("&cYou are flagged AFK. Answer the AFK check "
-                    + "first, then review."));
             return null;
         }
         p.settled = true;

@@ -35,7 +35,14 @@ public final class BareProbe {
                 // ordering, untouched by F1): either evidence string blocks.
                 new Row("PL4YG1LD3DMCPRO", ".pro"),
                 new Row("pl4y g1ld3dmc pr0", "gildedmc.pro"),
-                new Row("ｐｌ４ｙｇ１ｌｄ３ｄｍｃｐｒ０", "playgildedmc.pro"));
+                new Row("ｐｌ４ｙｇ１ｌｄ３ｄｍｃｐｒ０", "playgildedmc.pro"),
+                // Website evasions: dot-words, brackets, spacing all fold to
+                // dots in advertForm, then the bare path reconstructs.
+                new Row("coolserver dot com", "coolserver.com"),
+                new Row("coolserver[.]com", "coolserver.com"),
+                new Row("coolserver (dot) com", "coolserver.com"),
+                new Row("www coolserver com", "coolserver.com"),
+                new Row("play at coolserver dot gg", "coolserver.gg"));
 
         List<String> mustStayClean = List.of(
                 "lvl100pro",

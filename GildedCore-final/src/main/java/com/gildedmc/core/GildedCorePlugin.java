@@ -64,13 +64,14 @@ import com.gildedmc.core.modules.RedstoneThrottle;
 import com.gildedmc.core.modules.RedstoneUnstaler;
 import com.gildedmc.core.modules.PlayerWipeModule;
 import com.gildedmc.core.modules.RenameContextTracker;
+import com.gildedmc.core.modules.ReviewGui;
 import com.gildedmc.core.modules.RedeemCodeModule;
 import com.gildedmc.core.modules.EntityLimitModule;
 import com.gildedmc.core.modules.RewardsModule;
 import com.gildedmc.core.modules.ReviewModule;
 import com.gildedmc.core.modules.ConsoleGuard;
+import com.gildedmc.core.modules.FlagReviewStore;
 import com.gildedmc.core.modules.SignContextTracker;
-import com.gildedmc.core.modules.StaffMacroModule;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.io.File;
 import java.io.IOException;
@@ -146,12 +147,12 @@ implements Listener {
      * executives at all), {@code staffmanager.ladder} in config.yml (which
      * stopped at {@code sradmin}), {@link #isManagerPlus} (a hardcoded
      * {@code Set.of} that knew about {@code executive} but not
-     * {@code developer}), and {@code staff-macro.staff-ranks}. A Senior Admin
+     * {@code developer}). A Senior Admin
      * was staff to one of them and not the next.
      *
      * <p>{@link #STAFF_ROLES} is now the one list. Config still wins where it
-     * is set - {@code staffmanager.ladder} and {@code staff-macro.staff-ranks}
-     * are read first and only fall back to this - but the fallback is no
+     * is set - {@code staffmanager.ladder}
+     * is read first and only falls back to this - but the fallback is no
      * longer a truncated copy.
      */
     private static final List<String> STAFF_ROLES = List.of(
@@ -169,6 +170,21 @@ implements Listener {
      */
     private static final Set<String> MANAGER_PLUS_ROLES = Set.of(
             "manager", "executive", "dev", "developer", "co-owner", "owner");
+
+    /**
+     * Executive and above - the gate for flag-review adjudication. Sits above
+     * {@link #MANAGER_PLUS_ROLES}: managers can create codes and hire, but only
+     * executive+ may mark a detection false-positive and retrain the filter.
+     */
+    private static final Set<String> EXECUTIVE_PLUS_ROLES = Set.of(
+            "executive", "dev", "developer", "co-owner", "owner");
+
+    /** Live LuckPerms primary group, or "default". Never null. */
+    public boolean isExecutivePlus(Player player) {
+        if (player == null) return false;
+        if (player.hasPermission("gildedcore.admin")) return true;
+        return EXECUTIVE_PLUS_ROLES.contains(group(player));
+    }
 
     private final List<String> staffRanks = STAFF_ROLES;
     private String activeRtpQueueWorld;
@@ -193,12 +209,13 @@ implements Listener {
     private SignContextTracker signContextTracker;
     private RenameContextTracker renameContextTracker;
     private ContextAwareAntiAd contextAwareAntiAd;
+    private FlagReviewStore flagReviewStore;
+    private ReviewGui reviewGui;
 
     public ChatGuardModule chatGuard() { return this.chatGuardModule; }
     private ActiveRankModule activeRankModule;
     private RedstoneThrottle redstoneThrottle;
     private RedstoneUnstaler redstoneUnstaler;
-    private StaffMacroModule staffMacroModule;
     private PlayerWipeModule playerWipeModule;
     private DiagnosticsModule diagnosticsModule;
     private ReviewModule reviewModule;
@@ -250,6 +267,14 @@ implements Listener {
         this.chatGuardModule.setContextAwareAntiAd(this.contextAwareAntiAd);
         Bukkit.getPluginManager().registerEvents((Listener)this.signContextTracker, (Plugin)this);
         Bukkit.getPluginManager().registerEvents((Listener)this.renameContextTracker, (Plugin)this);
+        // Staff flag-review queue: every advertising block lands here with who,
+        // what, and the model percentage; executive+ adjudicate false positives.
+        this.flagReviewStore = new FlagReviewStore();
+        this.chatGuardModule.setFlagReviews(this.flagReviewStore);
+        this.reviewGui = new ReviewGui(this, this.flagReviewStore, this.antiAdPipeline,
+                this.chatGuardModule, this::isExecutivePlus);
+        this.reviewGui.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.reviewGui, (Plugin)this);
         Bukkit.getPluginManager().registerEvents((Listener)this.chatGuardModule, (Plugin)this);
         this.activeRankModule = new ActiveRankModule(this);
         this.activeRankModule.enable();
@@ -262,9 +287,6 @@ implements Listener {
         this.redstoneUnstaler = new RedstoneUnstaler(this);
         this.redstoneUnstaler.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.redstoneUnstaler, (Plugin)this);
-        this.staffMacroModule = new StaffMacroModule(this, null);
-        this.staffMacroModule.enable();
-        Bukkit.getPluginManager().registerEvents((Listener)this.staffMacroModule, (Plugin)this);
         this.playerWipeModule = new PlayerWipeModule(this);
         this.playerWipeModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.playerWipeModule, (Plugin)this);
@@ -273,7 +295,7 @@ implements Listener {
         rebind("playerwipe");
         // Retention: evidence-keep-days had never actually been enforced.
         // Human sign-off. Wired after the guard so it can hand it the queue.
-        this.reviewModule = new ReviewModule(this, this.staffMacroModule,
+        this.reviewModule = new ReviewModule(this,
                 this.chatGuardModule.localAi());
         this.reviewModule.enable();
         this.chatGuardModule.setReview(this.reviewModule);
@@ -290,9 +312,17 @@ implements Listener {
         this.consoleGuard = new ConsoleGuard(this, this.chatGuardModule);
         this.consoleGuard.enable();
         this.diagnosticsModule = new DiagnosticsModule(this,
-                this.chatGuardModule, this.staffMacroModule, null,
+                this.chatGuardModule,
                 null, this.playerWipeModule, this.activeRankModule);
         Bukkit.getPluginManager().registerEvents((Listener)this.diagnosticsModule, (Plugin)this);
+    }
+
+    /** /flagreview: staff flag-review queue. Rank gate lives in the GUI. */
+    private boolean openFlagReview(CommandSender sender) {
+        if (!(sender instanceof Player viewer)) return true;
+        if (this.reviewGui == null) return true;
+        this.reviewGui.openGui(viewer);
+        return true;
     }
 
     /** Points a command declared in plugin.yml back at this plugin's onCommand. */
@@ -355,7 +385,6 @@ implements Listener {
         if (this.staffMonitorModule != null) this.staffMonitorModule.disable();
         if (this.chatGuardModule != null) this.chatGuardModule.disable();
         if (this.activeRankModule != null) this.activeRankModule.disable();
-        if (this.staffMacroModule != null) this.staffMacroModule.disable();
         if (this.redstoneThrottle != null) this.redstoneThrottle.disable();
         if (this.redstoneUnstaler != null) this.redstoneUnstaler.disable();
         if (this.playerWipeModule != null) this.playerWipeModule.disable();
@@ -366,6 +395,7 @@ implements Listener {
         if (this.consoleGuard != null) this.consoleGuard.disable();
         if (this.antiAdPipeline != null) this.antiAdPipeline.disable();
         if (this.contextAwareAntiAd != null) this.contextAwareAntiAd.disable();
+        if (this.reviewGui != null) this.reviewGui.disable();
         if (this.renameContextTracker != null) this.renameContextTracker.disable();
         if (this.signContextTracker != null) this.signContextTracker.disable();
     }
@@ -396,9 +426,9 @@ implements Listener {
                     this.staffMonitorModule.command(sender, name, args);
             case "textguard", "gildedguard" -> this.chatGuardModule.command(sender, args);
             case "activerank", "gildedactive" -> this.activeRankModule.command(sender, args);
-            case "staffmacro" -> this.staffMacroModule.command(sender, args);
             case "playerwipe" -> this.playerWipeModule.command(sender, args);
             case "review" -> this.reviewModule.command(sender, args);
+            case "flagreview" -> openFlagReview(sender);
             case "rewards", "dailyrewards", "playtimerewards" -> this.rewardsModule.command(sender, args);
             case "redeem" -> this.redeemModule.redeem(sender, args);
             case "redeemcode" -> this.redeemModule.admin(sender, args);
@@ -451,9 +481,9 @@ implements Listener {
             Map.entry("staffafk",         "staffmonitor.view"),
             Map.entry("textguard",        "gildedcore.chatguard.admin"),
             Map.entry("gildedguard",      "gildedcore.chatguard.admin"),
-            Map.entry("staffmacro",       "gildedcore.staffmacro.admin"),
             Map.entry("playerwipe",       "gildedcore.playerwipe"),
             Map.entry("review",           "gildedcore.review"),
+            Map.entry("flagreview",       "gildedcore.flagreview"),
             Map.entry("redeemcode",       "gildedcore.redeemcode"),
             Map.entry("rewards",          "gildedcore.rewards"),
             Map.entry("dailyrewards",     "gildedcore.rewards"),
@@ -532,7 +562,6 @@ implements Listener {
             this.staffMonitorModule.reload();
             this.chatGuardModule.reload();
             this.activeRankModule.reload();
-            this.staffMacroModule.reload();
             this.playerWipeModule.reload();
             this.reviewModule.reload();
             if (this.entityLimitModule != null) this.entityLimitModule.reload();
@@ -1760,11 +1789,6 @@ implements Listener {
                 return this.complete(args, List.of("check", "grant", "regrant", "reload"));
             }
             return args.length == 2 ? this.onlineNames(args[1]) : Collections.emptyList();
-        }
-        if (name.equals("staffmacro")) {
-            return args.length == 1
-                    ? this.complete(args, List.of("status", "check", "reload"))
-                    : (args.length == 2 ? this.onlineNames(args[1]) : Collections.emptyList());
         }
         if (name.equals("review")) {
             return args.length == 1

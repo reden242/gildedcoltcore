@@ -48,8 +48,11 @@ import java.util.concurrent.Future;
 public final class TrainMillennium {
 
     // ---- shape ----------------------------------------------------------
-    private static final int EMB_DIM = 48;
-    private static final int HIDDEN = 48;
+    // Scaled up for the advert-only v4-big generation: EMB 48->64 and
+    // HIDDEN 48->128 roughly doubles parameters (~0.85M, ~3.4MB) while
+    // staying under the 5MB ship budget. Same corpus, same gates.
+    private static final int EMB_DIM = 64;
+    private static final int HIDDEN = 128;
     private static final int LAYERS = 2;
     private static final int BUCKET = 4096;
     private static final int GRAM_LEN = 4;
@@ -62,7 +65,10 @@ public final class TrainMillennium {
 
     // ---- training -------------------------------------------------------
     private static final int EPOCHS = 6;
-    private static final int BATCH = 64;
+    // Doubled from 64: 15 workers split each batch, so 64 meant ~4 samples
+    // per worker per sync+broadcast round. 128 halves the rounds with the
+    // same per-epoch work and the same gates.
+    private static final int BATCH = 128;
     private static final float LR = 3.0e-3f;
     private static final float VAL_FRACTION = 0.10f;
     private static final long SEED = 42L;

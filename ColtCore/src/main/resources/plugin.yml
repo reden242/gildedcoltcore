@@ -1,7 +1,7 @@
 name: ColtCore
 loadbefore:
 - VirtualSpawner
-version: 1.12.0
+version: 1.13.0
 main: com.coltcore.core.ColtCorePlugin
 api-version: '1.21'
 author: ColtCore
@@ -125,14 +125,14 @@ commands:
     permission: coltcore.activerank
     aliases:
     - coltactive
-  staffmacro:
-    description: Staff AFK and macro detection, verified against Grim's simulation.
-    usage: /staffmacro <status|check <player>|reload>
-    permission: coltcore.staffmacro.admin
   review:
     description: Human sign-off on automated punishments.
     usage: /review [approve|deny] <id> | list
     permission: coltcore.review
+  flagreview:
+    description: Review advertising flags, mark false positives. Executive and above.
+    usage: /flagreview
+    permission: coltcore.flagreview
   rewards:
     description: Claim daily and playtime rewards.
     usage: /rewards <daily|playtime|claimall|status>
@@ -263,19 +263,13 @@ permissions:
   coltcore.activerank.exempt:
     description: Never auto-granted the active rank. Give this to staff and paid ranks.
     default: false
-  coltcore.staffmacro.admin:
-    description: Use /staffmacro.
-    default: op
-  coltcore.staffmacro.alerts:
-    description: Receive staff AFK/macro flags.
-    default: op
-  coltcore.staffmacro.exempt:
-    description: Never analysed for macro behaviour, whatever the rank.
-    default: false
   coltlagguard.admin:
     default: op
   coltlagguard.bypass:
     default: op
   coltcore.review:
     description: Approve or deny automated punishments. Give to admin and above.
+    default: op
+  coltcore.flagreview:
+    description: Open the advertising flag queue. Executive and above.
     default: op

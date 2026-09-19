@@ -110,6 +110,8 @@ public final class ChatGuardModule implements Listener {
     private AntiAdPipeline antiAd;
     /** 5-layer context-aware anti-ad system; null until wired. */
     private ContextAwareAntiAd contextAwareAntiAd;
+    /** Staff-visible flag queue; null until wired. */
+    private FlagReviewStore flagReviews;
 
     private boolean enabled;
     private int repeatFastPath = 2;
@@ -458,6 +460,9 @@ public final class ChatGuardModule implements Listener {
 
     /** Wires the 5-layer context-aware anti-ad system. */
     public void setContextAwareAntiAd(ContextAwareAntiAd ctx) { this.contextAwareAntiAd = ctx; }
+
+    /** Wires the staff flag-review queue. */
+    public void setFlagReviews(FlagReviewStore store) { this.flagReviews = store; }
 
     private void readConfig() {
         ConfigurationSection c = this.plugin.getConfig().getConfigurationSection("chat-guard");
@@ -1176,6 +1181,14 @@ public final class ChatGuardModule implements Listener {
         String trainingLabel = CAT_LIGHT_ADVERT.equals(category)
                 ? LocalAiModule.LABEL_ADVERTISING : category;
         this.local.learn(raw, trainingLabel, "chat-filter-" + reason);
+        // Staff review queue: who said what, at what percentage, and why.
+        if (this.flagReviews != null) {
+            try {
+                this.flagReviews.add(player.getName(), raw, confidence, reason, source);
+            } catch (Throwable ignored) {
+                // A review backlog must never break a block.
+            }
+        }
         // After they advertised: the Layer 3 word cache learns the words.
         if (this.antiAd != null) {
             try {

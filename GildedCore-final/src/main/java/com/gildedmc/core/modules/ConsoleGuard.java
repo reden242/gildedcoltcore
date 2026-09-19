@@ -133,7 +133,6 @@ public final class ConsoleGuard {
         this.ignore.add("[localai]");
         this.ignore.add("[offend]");
         this.ignore.add("[review]");
-        this.ignore.add("[staffmacro]");
     }
 
     private void compile(String regex, List<Pattern> into) {

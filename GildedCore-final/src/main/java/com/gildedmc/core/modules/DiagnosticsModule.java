@@ -41,8 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <h2>Why a status page</h2>
  * Half of this plugin's behaviour depends on which optional plugins are
- * installed — Grim decides whether staff macro detection can conclude anything,
- * LiteBans decides where punishments land, LuckPerms decides who counts as
+ * installed — LiteBans decides where punishments land, LuckPerms decides who counts as
  * staff. "It isn't working" is nearly always one of those missing, so the
  * status page names each one and what its absence costs.
  */
@@ -52,8 +51,6 @@ public final class DiagnosticsModule implements Listener {
 
     private final JavaPlugin plugin;
     private final ChatGuardModule guard;
-    private final StaffMacroModule macro;
-    private final GrimBridge grim;
     private final MaintenanceModule maintenance;
     private final PlayerWipeModule wipe;
     private final ActiveRankModule active;
@@ -61,13 +58,10 @@ public final class DiagnosticsModule implements Listener {
     private final Map<UUID, Inventory> open = new ConcurrentHashMap<>();
 
     public DiagnosticsModule(JavaPlugin plugin, ChatGuardModule guard,
-                             StaffMacroModule macro, GrimBridge grim,
-                             MaintenanceModule maintenance,
-                             PlayerWipeModule wipe, ActiveRankModule active) {
+                             MaintenanceModule maintenance, PlayerWipeModule wipe,
+                             ActiveRankModule active) {
         this.plugin = plugin;
         this.guard = guard;
-        this.macro = macro;
-        this.grim = grim;
         this.maintenance = maintenance;
         this.wipe = wipe;
         this.active = active;
@@ -149,7 +143,6 @@ public final class DiagnosticsModule implements Listener {
         to.sendMessage(UiKit.colour("&7Modules:"));
         line(to, "text guard", this.plugin.getConfig().getBoolean("chat-guard.enabled", false));
         line(to, "local ai", this.plugin.getConfig().getBoolean("local-ai.enabled", false));
-        line(to, "staff macro", this.plugin.getConfig().getBoolean("staff-macro.enabled", false));
         line(to, "staff monitor", this.plugin.getConfig().getBoolean("staff-monitor.enabled", false));
         line(to, "active rank", this.plugin.getConfig().getBoolean("active-rank.enabled", false));
         line(to, "player wipe", this.plugin.getConfig().getBoolean("playerwipe.enabled", true));
@@ -160,7 +153,6 @@ public final class DiagnosticsModule implements Listener {
 
         to.sendMessage(UiKit.colour("&7Optional plugins:"));
         dep(to, "LiteBans", "punishments go to the internal store instead");
-        dep(to, "GrimAC", "staff macro detection cannot verify, so it only logs");
         dep(to, "LuckPerms", "staff ranks fall back to a permission node");
         dep(to, "Essentials", "playtime and home wipes will not run");
         dep(to, "WorldEdit", "stash schematics cannot be pasted");
@@ -207,7 +199,6 @@ public final class DiagnosticsModule implements Listener {
         checkAdvertising(out);
         checkWipe(out);
         checkLocalAi(out);
-        checkMacro(out);
         checkDeps(out);
         return out;
     }
@@ -342,75 +333,6 @@ public final class DiagnosticsModule implements Listener {
         }
     }
 
-    /**
-     * Runs the real cycle detector against a synthetic macro and a synthetic
-     * human, using whatever thresholds are configured right now.
-     *
-     * <p>This is the check worth having: it proves the numbers in the config
-     * still separate the two cases, rather than assuming the shipped defaults
-     * were kept.
-     */
-    private void checkMacro(List<Check> out) {
-        ConfigurationSection c = this.plugin.getConfig().getConfigurationSection("staff-macro");
-        if (c == null || !c.getBoolean("enabled", false)) {
-            out.add(new Check("staff macro", Check.Level.WARN, "disabled in config"));
-            return;
-        }
-        int minSamples = c.getInt("cycle.min-samples", 24);
-        int minRepeats = c.getInt("cycle.min-repeats", 6);
-        double minMatch = c.getDouble("cycle.min-pattern-match", 0.5D);
-        double maxEnvelope = c.getDouble("cycle.max-envelope", 0.25D);
-        long minSpan = c.getLong("cycle.min-duration-seconds", 90L) * 1000L;
-        long pMin = c.getLong("cycle.period-min-ms", 400L);
-        long pMax = c.getLong("cycle.period-max-ms", 5000L);
-
-        boolean macroTrips = simulate(new Random(1), 20, 0, 0, 0.25D,
-                minSamples, minRepeats, minMatch, maxEnvelope, minSpan, pMin, pMax);
-        boolean humanTrips = simulate(new Random(2), 60, 0.08D, 1500, 0.25D,
-                minSamples, minRepeats, minMatch, maxEnvelope, minSpan, pMin, pMax);
-
-        if (macroTrips && !humanTrips) {
-            out.add(new Check("staff macro", Check.Level.PASS,
-                    "thresholds separate a bounded macro from a human correctly"));
-        } else if (!macroTrips) {
-            out.add(new Check("staff macro", Check.Level.FAIL,
-                    "a simulated macro does NOT trip these thresholds; raise max-envelope "
-                    + "or lower min-duration-seconds"));
-        } else {
-            out.add(new Check("staff macro", Check.Level.FAIL,
-                    "a simulated human DOES trip these thresholds; lower max-envelope"));
-        }
-        if (minSpan >= c.getLong("window-seconds", 120L) * 1000L) {
-            out.add(new Check("staff macro", Check.Level.FAIL,
-                    "min-duration-seconds is not shorter than window-seconds, so a cycle "
-                    + "can never be old enough to judge"));
-        }
-    }
-
-    /** One synthetic run through the shipped detector. */
-    private static boolean simulate(Random rng, int jitter, double pauseChance, int pauseMs,
-                                    double diversity, int minSamples, int minRepeats,
-                                    double minMatch, double maxEnvelope, long minSpan,
-                                    long pMin, long pMax) {
-        int n = 480;                                  // 2 minutes of a 1s cycle
-        String[] samples = new String[n];
-        long[] times = new long[n];
-        long now = 0;
-        for (int i = 0; i < n; i++) {
-            samples[i] = "act" + (i % 4) + (rng.nextDouble() < diversity ? "v" + rng.nextInt(3) : "");
-            times[i] = now;
-            long j = jitter == 0 ? 0 : rng.nextInt(jitter * 2 + 1) - jitter;
-            long pause = rng.nextDouble() < pauseChance ? (long) (rng.nextDouble() * pauseMs) : 0;
-            now += 250 + j + pause;
-        }
-        StaffMacroModule.Cycle cycle =
-                StaffMacroModule.detectCycle(samples, times, minSamples, minRepeats, minMatch);
-        return cycle != null
-                && cycle.meanPeriodMs() >= pMin && cycle.meanPeriodMs() <= pMax
-                && cycle.spanMs() >= minSpan
-                && cycle.envelope() <= maxEnvelope;
-    }
-
     private void checkDeps(List<Check> out) {
         String backend = this.plugin.getConfig()
                 .getString("punishments.backend", "auto").toLowerCase(Locale.ROOT);
@@ -422,13 +344,6 @@ public final class DiagnosticsModule implements Listener {
             out.add(new Check("punishments", Check.Level.PASS,
                     "backend resolves to " + this.guard.punishments().backend()
                             .name().toLowerCase(Locale.ROOT)));
-        }
-        if (this.plugin.getConfig().getBoolean("staff-macro.enabled", false)
-                && this.plugin.getConfig().getBoolean("staff-macro.require-grim-verification", true)
-                && !(this.grim != null && this.grim.available())) {
-            out.add(new Check("staff macro", Check.Level.WARN,
-                    "GrimAC is unavailable and verification is required, so nothing will "
-                    + "ever be flagged - detections are logged only"));
         }
         if (!this.plugin.getConfig().getBoolean("maintenance.enabled", true)) {
             out.add(new Check("maintenance", Check.Level.WARN,
@@ -476,14 +391,12 @@ public final class DiagnosticsModule implements Listener {
         Map<String, List<String>> groups = new LinkedHashMap<>();
         groups.put("Helper", List.of(
                 ChatGuardModule.PERM_ALERTS,
-                StaffMacroModule.PERM_ALERTS,
                 "staffmonitor.view"));
         groups.put("Moderator (helper, plus)", List.of(
                 "gildedcore.staff"));
         groups.put("Admin (moderator, plus)", List.of(
                 PERM,
                 ChatGuardModule.PERM_ADMIN,
-                StaffMacroModule.PERM_ADMIN,
                 PlayerWipeModule.PERM,
                 ActiveRankModule.PERM_ADMIN,
                 "staffmonitor.admin"));
@@ -491,7 +404,6 @@ public final class DiagnosticsModule implements Listener {
                 "staffmonitor.tracked"));
         groups.put("Exemptions - give deliberately", List.of(
                 ChatGuardModule.PERM_BYPASS,
-                StaffMacroModule.PERM_EXEMPT,
                 ActiveRankModule.PERM_EXEMPT));
 
         to.sendMessage(UiKit.colour("&8&m----------------------------------------"));
@@ -521,10 +433,7 @@ public final class DiagnosticsModule implements Listener {
                 "Runs console commands. No undo.", "to see the usage"));
         inv.setItem(12, UiKit.card(Material.ENDER_EYE, "&d&lMOST AFK", "Staff idle leaderboard",
                 List.of("Ranked by total idle time, worst first."), null, "to open /staffafk"));
-        inv.setItem(13, UiKit.card(Material.CLOCK, "&5&lSTAFF MACRO", "AFK and macro detection",
-                List.of("Cycle detection, verified by Grim,",
-                        "confirmed by a chat check."), null, "to open /staffmacro"));
-        inv.setItem(14, UiKit.card(Material.SHIELD, "&b&lTEXT GUARD", "Chat, signs, books, names",
+        inv.setItem(13, UiKit.card(Material.SHIELD, "&b&lTEXT GUARD", "Chat, signs, books, names",
                 List.of("Escalation ladder and mute records."), null, "to open /textguard"));
         inv.setItem(15, UiKit.card(Material.AMETHYST_SHARD, "&e&lLOCAL AI", "In-process classifier",
                 List.of("Training status, readiness and shadow mode."), null, "to open /textguard model"));
@@ -564,7 +473,6 @@ public final class DiagnosticsModule implements Listener {
                 p.sendMessage(UiKit.colour("&eUsage: &f/playerwipe <player>"));
             }
             case "MOST AFK" -> { p.closeInventory(); p.performCommand("staffafk"); }
-            case "STAFF MACRO" -> { p.closeInventory(); p.performCommand("staffmacro status"); }
             case "TEXT GUARD" -> { p.closeInventory(); p.performCommand("textguard status"); }
             case "LOCAL AI" -> { p.closeInventory(); p.performCommand("textguard model"); }
             case "ACTIVE RANK" -> { p.closeInventory(); p.performCommand("activerank"); }

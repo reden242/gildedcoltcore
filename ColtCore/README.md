@@ -3,7 +3,7 @@
 Everything measured, with the method next to each number. Where something was
 not measured, or was measured and disappointed, that is said plainly.
 
-Build: `mvn clean package` → `target/ColtCore-1.12.0.jar`. Java 21, Paper 1.21.4.
+Build: `mvn clean package` → `target/ColtCore-1.13.0.jar`. Java 21, Paper 1.21.4.
 
 ---
 
@@ -24,11 +24,11 @@ one question, "is this text an advert?", and nothing else.
 
 | | |
 |---|---|
-| parameters | **473,905** |
-| disk | **1,888,831 bytes (~1.80 MB)** |
+| parameters | **1,115,393** |
+| disk | **4,491,707 bytes (~4.28 MB)** |
 | labels | `clean, advertising` — **only these two** |
 | training corpus | **61,098 rows** (`seed_corpus.v2.tsv` 15,274 + 15,274, `tld_corpus.v2.tsv` 15,275 + 15,275) |
-| held-out (`TrainMillennium eval`) | **P 0.9995, R 1.0000, cleanFP 0.0003** |
+| held-out (`TrainMillennium eval`) | **P 0.9990, R 1.0000, cleanFP 0.0007** |
 
 An older revision of this file described a 7-label fastText-style model
 (`clean, advertising, harassment, death-threat, doxxing, spam-incite, nsfw`,

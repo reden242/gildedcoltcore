@@ -1,7 +1,7 @@
 name: GildedCore
 loadbefore:
 - VirtualSpawner
-version: 1.12.0
+version: 1.13.0
 main: com.gildedmc.core.GildedCorePlugin
 api-version: '1.21'
 author: GildedMC
@@ -125,10 +125,6 @@ commands:
     permission: gildedcore.activerank
     aliases:
     - gildedactive
-  staffmacro:
-    description: Staff AFK and macro detection, verified against Grim's simulation.
-    usage: /staffmacro <status|check <player>|reload>
-    permission: gildedcore.staffmacro.admin
   redeem:
     description: Redeem a one-time code. One redemption per IP.
     usage: /redeem <code>
@@ -141,6 +137,10 @@ commands:
     description: Human sign-off on automated punishments.
     usage: /review [approve|deny] <id> | list
     permission: gildedcore.review
+  flagreview:
+    description: Review advertising flags, mark false positives. Executive and above.
+    usage: /flagreview
+    permission: gildedcore.flagreview
   rewards:
     description: Claim daily and playtime rewards.
     usage: /rewards <daily|playtime|claimall|status>
@@ -264,12 +264,6 @@ permissions:
   gildedcore.review:
     description: Approve or deny automated punishments. Give to admin and above.
     default: op
-  gildedcore.staffmacro.admin:
-    description: Use /staffmacro.
+  gildedcore.flagreview:
+    description: Open the advertising flag queue. Executive and above.
     default: op
-  gildedcore.staffmacro.alerts:
-    description: Receive staff AFK/macro flags.
-    default: op
-  gildedcore.staffmacro.exempt:
-    description: Never analysed for macro behaviour, whatever the rank.
-    default: false
