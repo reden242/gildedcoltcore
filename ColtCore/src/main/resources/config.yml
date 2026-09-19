@@ -1071,7 +1071,6 @@ chat-guard:
     # play/discord/store subdomains. Nothing else is allowlisted.
     allow:
       - coltcore.dpdns.org
-      - discord.gg/coltcore
       - coltmc.bond
       - coltmc.dpdns.org
       - coltmc.gildedmc.pro
