@@ -142,6 +142,33 @@ public final class AntibotGuard implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onJoin(PlayerJoinEvent event) {
         touch(event.getPlayer());
+        contagionBan(event.getPlayer());
+    }
+
+    /**
+     * Ban contagion: a banned account joining from a new address gets that
+     * address banned too. Evasion by IP rotation converges to banning every
+     * address the account touches; legitimate players sharing an address
+     * with a banned account must be pardoned explicitly.
+     */
+    private void contagionBan(Player player) {
+        try {
+            if (!isUuidBanned(player.getUniqueId())) return;
+            String ip = ipOf(player);
+            if (ip.isEmpty() || isIpBanned(ip)) return;
+            if (!banIp(ip)) return;
+            this.plugin.getLogger().warning("[AntiBot] contagion: banned account "
+                    + player.getName() + " joined from new IP " + ip + " - IP banned.");
+            for (Player staff : Bukkit.getOnlinePlayers()) {
+                if (staff.hasPermission("coltcore.rewards.admin")) {
+                    staff.sendMessage(UiKit.colour("&c[AntiBot] &7Banned account &f"
+                            + player.getName() + " &7joined from new IP &f" + ip
+                            + " &7- IP banned."));
+                }
+            }
+        } catch (Throwable ignored) {
+            // Ban bookkeeping must never break a join.
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
