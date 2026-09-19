@@ -99,7 +99,7 @@ commands:
     permission: gildedcore.deepslatedecoy
   spawnstash:
     description: Paste a decoy stash schematic to catch x-rayers and griefers.
-    usage: /spawnstash [small|medium|large|<name>] [force] | list
+    usage: /spawnstash [force] | list
     permission: gildedcore.spawnstash
   staffmonitor:
     description: Open the staff audit panel.

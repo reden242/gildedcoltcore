@@ -62,11 +62,14 @@ import java.util.Set;
  * to work out which stash any break / place / interact belongs to, who found
  * it, and how long it took.
  *
- * Layout:
- *   plugins/ColtCore/stashes/small/*.schem
- *   plugins/ColtCore/stashes/medium/*.schem
- *   plugins/ColtCore/stashes/large/*.schem
- *   plugins/ColtCore/stashes/*.schem        (untagged, size "custom")
+ * Layout: any mix of files directly under plugins/ColtCore/stashes, in any
+ * subfolders:
+ *   *.schem, *.schematic   (WorldEdit formats, read natively)
+ *   *.litematic            (Litematica, translated on the fly and cached)
+ *
+ * There are no size types and no per-type folders: every spawn picks uniformly
+ * at random from everything available. The recorded "size" is derived from the
+ * pasted volume (small/medium/large) for the alerts only.
  */
 public final class StashModule implements Listener {
 
@@ -76,8 +79,6 @@ public final class StashModule implements Listener {
     }
 
     public enum TamperType { BREAK, PLACE, INTERACT }
-
-    private static final List<String> SIZES = List.of("small", "medium", "large");
 
     private final JavaPlugin plugin;
     private final SecureRandom random = new SecureRandom();
@@ -115,10 +116,6 @@ public final class StashModule implements Listener {
         this.stashesFolder = new File(this.plugin.getDataFolder(), "stashes");
         if (!this.stashesFolder.exists()) {
             this.stashesFolder.mkdirs();
-        }
-        for (String size : SIZES) {
-            File sub = new File(this.stashesFolder, size);
-            if (!sub.exists()) sub.mkdirs();
         }
         this.dataFile = new File(this.plugin.getDataFolder(), "stashes.yml");
         this.data = YamlConfiguration.loadConfiguration(this.dataFile);
@@ -182,45 +179,23 @@ public final class StashModule implements Listener {
         Player player = (Player) sender;
 
         if (args.length >= 1 && args[0].equalsIgnoreCase("list")) {
-            for (String size : allSizeKeys()) {
-                List<File> files = this.listSchematics(size);
-                if (!files.isEmpty()) {
-                    sender.sendMessage(this.color("&7" + size + ": &f" + this.namesJoined(files)));
-                }
+            List<File> files = this.listAllSchematics();
+            if (files.isEmpty()) {
+                sender.sendMessage(this.color("&cNo schematics in &fstashes/&c."));
+            } else {
+                sender.sendMessage(this.color("&7Available (" + files.size() + "): &f" + this.namesJoined(files)));
             }
             return true;
         }
 
         boolean force = args.length > 0 && args[args.length - 1].equalsIgnoreCase("force");
 
-        // /spawnstash [size|name] [force]
-        String selector = args.length >= 1 && !args[0].equalsIgnoreCase("force") ? args[0] : null;
-
-        String size;
-        File chosenFile;
-
-        if (selector == null) {
-            size = SIZES.get(this.random.nextInt(SIZES.size()));
-            chosenFile = this.randomFrom(size);
-            if (chosenFile == null) {
-                size = "custom";
-                chosenFile = this.randomFrom("custom");
-            }
-        } else if (isSizeKey(selector)) {
-            size = selector.toLowerCase(Locale.ROOT);
-            chosenFile = this.randomFrom(size);
-            if (chosenFile == null) {
-                sender.sendMessage(this.color("&cNo schematics in &fstashes/" + size + "/&c."));
-                return true;
-            }
-        } else {
-            chosenFile = this.findByName(selector);
-            if (chosenFile == null) {
-                sender.sendMessage(this.color("&cNo schematic named &f" + selector + "&c found."));
-                sender.sendMessage(this.color("&7Use &f/spawnstash list &7to see what is available."));
-                return true;
-            }
-            size = this.sizeOf(chosenFile);
+        // /spawnstash [force] — no types: a uniform random pick from everything
+        // available, whatever the format.
+        File chosenFile = this.randomSchematic();
+        if (chosenFile == null) {
+            sender.sendMessage(this.color("&cNo schematics in &fstashes/&c. Drop .schem, .schematic or .litematic files in there."));
+            return true;
         }
 
         Location targetLoc = this.resolveTargetLocation(player);
@@ -274,11 +249,11 @@ public final class StashModule implements Listener {
             return true;
         }
 
-        String stashId = this.recordStash(chosenFile, size, targetLoc, player,
+        String stashId = this.recordStash(chosenFile, sizeLabel(clipboard), targetLoc, player,
                 minX, minY, minZ, maxX, maxY, maxZ);
 
         sender.sendMessage(this.color("&aStash Summoned &7(&f" + this.stripExtension(chosenFile.getName())
-                + "&7, &f" + size + "&7)"));
+                + "&7, &f" + sizeLabel(clipboard) + "&7)"));
         sender.sendMessage(this.color("&7ID: &f" + stashId
                 + " &8| &7region &f" + minX + "," + minY + "," + minZ
                 + " &7to &f" + maxX + "," + maxY + "," + maxZ));
@@ -545,6 +520,18 @@ public final class StashModule implements Listener {
     /* ------------------------------------------------------------------ */
 
     private Clipboard readClipboard(File schematicFile) throws IOException {
+        String lower = schematicFile.getName().toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".litematic")) {
+            // Translated on the fly and cached inside LitematicReader.
+            return LitematicReader.read(schematicFile, name -> {
+                try {
+                    return com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(
+                            org.bukkit.Bukkit.createBlockData(name));
+                } catch (IllegalArgumentException ex) {
+                    return null;
+                }
+            });
+        }
         ClipboardFormat format = ClipboardFormats.findByFile(schematicFile);
         if (format == null) {
             throw new IOException("Unrecognized schematic format for file " + schematicFile.getName());
@@ -618,58 +605,55 @@ public final class StashModule implements Listener {
         return loc.getBlock().getLocation();
     }
 
-    private static boolean isSizeKey(String s) {
-        return s != null && SIZES.contains(s.toLowerCase(Locale.ROOT));
+    /** Size label derived from pasted volume, for alerts only. */
+    private static String sizeLabel(Clipboard clipboard) {
+        try {
+            com.sk89q.worldedit.math.BlockVector3 min =
+                    clipboard.getRegion().getMinimumPoint();
+            com.sk89q.worldedit.math.BlockVector3 max =
+                    clipboard.getRegion().getMaximumPoint();
+            long volume = (long) (max.getX() - min.getX() + 1)
+                    * (max.getY() - min.getY() + 1)
+                    * (max.getZ() - min.getZ() + 1);
+            if (volume < 1_000L) return "small";
+            if (volume < 8_000L) return "medium";
+            return "large";
+        } catch (Throwable ignored) {
+            return "custom";
+        }
     }
 
-    private static List<String> allSizeKeys() {
-        List<String> out = new ArrayList<>(SIZES);
-        out.add("custom");
+    /** Every schematic under the stashes root, any subfolder, all formats. */
+    private List<File> listAllSchematics() {
+        List<File> out = new ArrayList<>();
+        if (this.stashesFolder == null || !this.stashesFolder.isDirectory()) return out;
+        Deque<File> queue = new ArrayDeque<>();
+        queue.add(this.stashesFolder);
+        while (!queue.isEmpty()) {
+            File dir = queue.removeFirst();
+            File[] found = dir.listFiles();
+            if (found == null) continue;
+            for (File file : found) {
+                if (file.isDirectory()) {
+                    queue.addLast(file);
+                } else {
+                    String lower = file.getName().toLowerCase(Locale.ROOT);
+                    if (lower.endsWith(".schem") || lower.endsWith(".schematic")
+                            || lower.endsWith(".litematic")) {
+                        out.add(file);
+                    }
+                }
+            }
+        }
+        out.sort(Comparator.comparing(File::getName));
         return out;
     }
 
-    /** Schematics in a given size folder; "custom" means the stashes root. */
-    private List<File> listSchematics(String size) {
-        File dir = "custom".equalsIgnoreCase(size)
-                ? this.stashesFolder
-                : new File(this.stashesFolder, size.toLowerCase(Locale.ROOT));
-        List<File> files = new ArrayList<>();
-        File[] found = dir.listFiles((d, name) -> {
-            String lower = name.toLowerCase(Locale.ROOT);
-            return lower.endsWith(".schem") || lower.endsWith(".schematic");
-        });
-        if (found != null) files.addAll(Arrays.asList(found));
-        files.sort(Comparator.comparing(File::getName));
-        return files;
-    }
-
-    /** Every schematic, all sizes. */
-    private List<File> listAllSchematics() {
-        List<File> all = new ArrayList<>();
-        for (String size : allSizeKeys()) all.addAll(this.listSchematics(size));
-        return all;
-    }
-
-    private File randomFrom(String size) {
-        List<File> files = this.listSchematics(size);
+    /** Uniform random pick from everything available. */
+    private File randomSchematic() {
+        List<File> files = this.listAllSchematics();
         if (files.isEmpty()) return null;
         return files.get(this.random.nextInt(files.size()));
-    }
-
-    private String sizeOf(File file) {
-        File parent = file.getParentFile();
-        if (parent == null) return "custom";
-        String name = parent.getName().toLowerCase(Locale.ROOT);
-        return SIZES.contains(name) ? name : "custom";
-    }
-
-    private File findByName(String name) {
-        for (File file : this.listAllSchematics()) {
-            if (this.stripExtension(file.getName()).equalsIgnoreCase(name)) {
-                return file;
-            }
-        }
-        return null;
     }
 
     private String namesJoined(List<File> files) {
@@ -682,17 +666,13 @@ public final class StashModule implements Listener {
     }
 
     private String stripExtension(String name) {
-        return name.replaceFirst("(?i)\\.schematic$", "").replaceFirst("(?i)\\.schem$", "");
+        return name.replaceFirst("(?i)\\.schematic$", "").replaceFirst("(?i)\\.schem$", "")
+                .replaceFirst("(?i)\\.litematic$", "");
     }
 
-    /** Tab completion: size keywords plus every schematic name. */
+    /** Tab completion: list and force. Names are gone — spawns are random. */
     public List<String> schematicNames() {
-        List<String> names = new ArrayList<>(SIZES);
-        names.add("list");
-        for (File file : this.listAllSchematics()) {
-            names.add(this.stripExtension(file.getName()));
-        }
-        return names;
+        return new ArrayList<>(List.of("list", "force"));
     }
 
     private void saveData() {
