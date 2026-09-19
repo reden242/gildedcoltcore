@@ -55,17 +55,21 @@ import com.gildedmc.core.modules.DeepslateDecoyModule;
 import com.gildedmc.core.modules.KelpGrowthModule;
 import com.gildedmc.core.modules.StaffMonitorModule;
 import com.gildedmc.core.modules.ChatGuardModule;
+import com.gildedmc.core.modules.CommandTemplate;
+import com.gildedmc.core.modules.ContextAwareAntiAd;
 import com.gildedmc.core.modules.ActiveRankModule;
 import com.gildedmc.core.modules.DiagnosticsModule;
 import com.gildedmc.core.modules.UiKit;
 import com.gildedmc.core.modules.RedstoneThrottle;
 import com.gildedmc.core.modules.RedstoneUnstaler;
 import com.gildedmc.core.modules.PlayerWipeModule;
+import com.gildedmc.core.modules.RenameContextTracker;
 import com.gildedmc.core.modules.RedeemCodeModule;
 import com.gildedmc.core.modules.EntityLimitModule;
 import com.gildedmc.core.modules.RewardsModule;
 import com.gildedmc.core.modules.ReviewModule;
 import com.gildedmc.core.modules.ConsoleGuard;
+import com.gildedmc.core.modules.SignContextTracker;
 import com.gildedmc.core.modules.StaffMacroModule;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.io.File;
@@ -186,6 +190,9 @@ implements Listener {
     private StaffMonitorModule staffMonitorModule;
     private ChatGuardModule chatGuardModule;
     private AntiAdPipeline antiAdPipeline;
+    private SignContextTracker signContextTracker;
+    private RenameContextTracker renameContextTracker;
+    private ContextAwareAntiAd contextAwareAntiAd;
 
     public ChatGuardModule chatGuard() { return this.chatGuardModule; }
     private ActiveRankModule activeRankModule;
@@ -237,6 +244,12 @@ implements Listener {
         // Anti-ad pipeline: layer 2 and layer 3, both the in-process classifier.
         this.antiAdPipeline = new AntiAdPipeline(this);
         this.chatGuardModule.setAntiAd(this.antiAdPipeline);
+        this.signContextTracker = new SignContextTracker();
+        this.renameContextTracker = new RenameContextTracker();
+        this.contextAwareAntiAd = new ContextAwareAntiAd(this.antiAdPipeline, this.signContextTracker, this.renameContextTracker);
+        this.chatGuardModule.setContextAwareAntiAd(this.contextAwareAntiAd);
+        Bukkit.getPluginManager().registerEvents((Listener)this.signContextTracker, (Plugin)this);
+        Bukkit.getPluginManager().registerEvents((Listener)this.renameContextTracker, (Plugin)this);
         Bukkit.getPluginManager().registerEvents((Listener)this.chatGuardModule, (Plugin)this);
         this.activeRankModule = new ActiveRankModule(this);
         this.activeRankModule.enable();
@@ -352,6 +365,9 @@ implements Listener {
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
         if (this.consoleGuard != null) this.consoleGuard.disable();
         if (this.antiAdPipeline != null) this.antiAdPipeline.disable();
+        if (this.contextAwareAntiAd != null) this.contextAwareAntiAd.disable();
+        if (this.renameContextTracker != null) this.renameContextTracker.disable();
+        if (this.signContextTracker != null) this.signContextTracker.disable();
     }
 
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -373,7 +389,6 @@ implements Listener {
             case "announcements" -> this.togglePreference(sender, "announcements", "Announcements");
             case "block", "ignore" -> this.block(sender, label, args);
             case "rtpqueue" -> this.rtpQueue(sender, args);
-            case "billfordtoggle" -> this.billFordModule.toggle(sender);
             case "billfordadmin" -> this.billFordModule.admin(sender, args);
             case "spawnstash" -> this.stashModule.command(sender, args);
             case "deepslatedecoy" -> this.deepslateDecoyModule.command(sender, args);
@@ -453,7 +468,6 @@ implements Listener {
             Map.entry("activerank",       "gildedcore.activerank"),
             Map.entry("gildedactive",     "gildedcore.activerank"),
             Map.entry("redeem",           "gildedcore.redeem"),
-            Map.entry("billfordtoggle",   "gildedbillford.use"),
             Map.entry("ping",             "gildedcore.ping"));
 
     /** The permission a command needs, or null when it is not one of ours. */
@@ -576,7 +590,7 @@ implements Listener {
         this.startReward("KEYALL", actor, "&e", () -> {
             int count = 0;
             for (Player player : Bukkit.getOnlinePlayers()) {
-                this.dispatch(this.getConfig().getString("rewards.key-command", "crate give %player% %crate% %amount%").replace("%player%", player.getName()).replace("%crate%", crate).replace("%amount%", String.valueOf(amount)));
+                this.dispatch(CommandTemplate.expand(this.getConfig().getString("rewards.key-command", "crate give %player% %crate% %amount%"), player.getName()).replace("%crate%", CommandTemplate.safeToken(crate)).replace("%amount%", String.valueOf(amount)));
                 this.playRewardSound(player);
                 ++count;
             }
@@ -605,7 +619,7 @@ implements Listener {
         this.startReward("KITALL", actor, "&a", () -> {
             int count = 0;
             for (Player player : Bukkit.getOnlinePlayers()) {
-                for (int i = 0; i < amount; i++) this.dispatch(this.getConfig().getString("rewards.kit-command", "kit give %kit% %player%").replace("%player%", player.getName()).replace("%kit%", kit));
+                for (int i = 0; i < amount; i++) this.dispatch(CommandTemplate.expand(this.getConfig().getString("rewards.kit-command", "kit give %kit% %player%"), player.getName()).replace("%kit%", CommandTemplate.safeToken(kit)));
                 player.showTitle(Title.title((Component)this.colorComponent("&#EEBB01&lYOU HAVE BEEN REWARDED"), (Component)this.colorComponent("&f" + kit + " kit")));
                 this.playRewardSound(player);
                 ++count;
@@ -643,7 +657,7 @@ implements Listener {
         this.startReward("SHARDALL", buyer, "&d", () -> {
             int count = 0;
             for (Player player : Bukkit.getOnlinePlayers()) {
-                this.dispatch(this.getConfig().getString("rewards.shard-command", "shard give %player% %amount%").replace("%player%", player.getName()).replace("%amount%", String.valueOf(amount)));
+                this.dispatch(CommandTemplate.expand(this.getConfig().getString("rewards.shard-command", "shard give %player% %amount%"), player.getName()).replace("%amount%", String.valueOf(amount)));
                 ++count;
             }
             OfflinePlayer op = Bukkit.getOfflinePlayer(buyer);
@@ -827,7 +841,7 @@ implements Listener {
             sender.sendMessage(this.color("&cUnknown or disallowed rank: &f" + rank));
             return true;
         }
-        this.dispatch(this.getConfig().getString("rankgive.command", "lp user %player% parent set %rank%").replace("%player%", args[0]).replace("%rank%", rank));
+        this.dispatch(CommandTemplate.expand(this.getConfig().getString("rankgive.command", "lp user %player% parent set %rank%"), args[0]).replace("%rank%", CommandTemplate.safeToken(rank)));
         sender.sendMessage(this.color("&aRank given: &f" + args[0] + " &8-> &e" + rank));
         return true;
     }
@@ -906,7 +920,7 @@ implements Listener {
     }
 
     private void setRank(Player actor, OfflinePlayer target, String rank, String action) {
-        this.dispatch("lp user " + target.getName() + " parent set " + rank);
+        this.dispatch("lp user " + CommandTemplate.safeName(target.getName()) + " parent set " + CommandTemplate.safeToken(rank));
         this.boxMessage(actor, "&#EEBB01Staff &7action by &f" + actor.getName(), "&f" + target.getName() + " &7was &e" + action + " &7to &f" + rank + "&7.");
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (!online.hasPermission("gildedcore.staffnotify") && !online.hasPermission("staffmanager.staff")) continue;

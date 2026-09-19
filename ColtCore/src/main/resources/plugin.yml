@@ -77,10 +77,6 @@ commands:
     description: Queue players for one shared RTP drop.
     usage: /rtpqueue
     permission: coltcore.rtpqueue
-  billfordtoggle:
-    description: Toggle BillFord set trades.
-    usage: /billfordtoggle
-    permission: gildedbillford.use
   billfordadmin:
     description: Manage BillFord set trades.
     usage: /billfordadmin <open|reload|setcost|setname>
@@ -228,8 +224,6 @@ permissions:
   coltcore.ping:
     description: Show your own or another player's ping.
     default: true
-  gildedbillford.use:
-    default: true
   gildedbillford.admin:
     default: op
   gildedlagguard.admin:
@@ -278,10 +272,6 @@ permissions:
   coltcore.staffmacro.exempt:
     description: Never analysed for macro behaviour, whatever the rank.
     default: false
-  coltbillford.use:
-    default: true
-  coltbillford.admin:
-    default: op
   coltlagguard.admin:
     default: op
   coltlagguard.bypass:

@@ -1,8 +1,5 @@
 settings:
   title: "&8BillFord Set Trades"
-  random-command: "billford"
-  set-mode-message: "&fSet trades enabled. Use &e/billfordtoggle &fto go back to random trades."
-  random-mode-message: "&fRandom trades enabled."
   no-items-message: "&cYou do not have the required recipe items."
   inventory-full-message: "&cYour inventory is full."
   bought-message: "&fTraded for &e%item%&f."

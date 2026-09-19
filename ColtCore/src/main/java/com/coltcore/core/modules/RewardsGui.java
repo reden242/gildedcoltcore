@@ -38,67 +38,93 @@ public final class RewardsGui implements Listener {
      * Opens the daily rewards chest GUI for the player.
      */
     public void openGui(Player player) {
-        Inventory inv = UiKit.chest(SIZE, "&6Daily Rewards");
-        UiKit.border(inv, Material.BLACK_STAINED_GLASS_PANE);
+        Inventory inv = UiKit.chest(SIZE, UiKit.gradient("DAILY REWARDS", "#ffcf4d", "#ff8a3d"));
+        UiKit.framed(inv, Material.BLACK_STAINED_GLASS_PANE, Material.ORANGE_STAINED_GLASS_PANE);
 
         boolean dailyReady = dailyReady(player);
         int streak = rewards.getData().getInt(
                 "players." + player.getUniqueId() + ".daily.streak", 0);
         ItemStack dailyItem = dailyReady
-                ? UiKit.item(Material.CHEST, "&aDaily Ready",
-                        "&7Day: &f" + streak,
-                        "&eClick to claim",
-                        "&7Rewards reset daily.")
-                : UiKit.item(Material.BARRIER, "&cDaily Claimed",
-                        "&7Day: &f" + streak,
-                        "&7Already claimed today.",
-                        "&7Come back tomorrow!");
-        inv.setItem(10, dailyItem);
+                ? UiKit.glow(UiKit.item(Material.CHEST, "&a&lDaily Ready",
+                        "&7Streak: &f" + streak + " day" + (streak == 1 ? "" : "s"),
+                        " ",
+                        "&e" + UiKit.ARROW + " &e&l&nCLICK &r&eto claim",
+                        "&8Resets daily - miss a day, lose the streak."))
+                : UiKit.item(Material.ENDER_CHEST, "&cDaily Claimed",
+                        "&7Streak: &f" + streak + " day" + (streak == 1 ? "" : "s"),
+                        " ",
+                        "&7Already claimed. Come back tomorrow!");
+        inv.setItem(11, dailyItem);
 
         long hours = player.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / (20L * 60L * 60L);
-        int playtimeReady = playtimeReady(player, hours);
-        ItemStack playtimeItem = playtimeReady > 0
-                ? UiKit.item(Material.DIAMOND, "&a" + playtimeReady + " Playtime Ready",
-                        "&7Hours: &f" + hours,
-                        "&eClick to claim all",
-                        "&7Playtime rewards unlock at thresholds.")
-                : UiKit.item(Material.BARRIER, "&cNo Playtime Ready",
-                        "&7Hours: &f" + hours,
-                        "&7Keep playing!",
-                        "&7Check /rewards status for details.");
-        inv.setItem(12, playtimeItem);
+        int ready = 0;
+        long nextAt = -1L;
+        for (var reward : rewards.playtimeRewards()) {
+            boolean claimed = rewards.getData().getBoolean(
+                    "players." + player.getUniqueId() + ".playtime.claimed." + reward.id(), false);
+            if (claimed) continue;
+            if (hours >= reward.threshold()) {
+                ready++;
+            } else if (nextAt < 0 || reward.threshold() < nextAt) {
+                nextAt = reward.threshold();
+            }
+        }
+        ItemStack playtimeItem;
+        if (ready > 0) {
+            playtimeItem = UiKit.glow(UiKit.item(Material.DIAMOND, "&a&l" + ready + " Playtime Ready",
+                    "&7Played: &f" + hours + "h",
+                    " ",
+                    "&e" + UiKit.ARROW + " &e&l&nCLICK &r&eto claim all"));
+        } else if (nextAt >= 0) {
+            playtimeItem = UiKit.item(Material.CLOCK, "&eNext Playtime Reward",
+                    UiKit.progressBar((double) hours / nextAt, 16, "&e", "&8",
+                            hours + "h", nextAt + "h"),
+                    " ",
+                    "&7Keep playing to unlock it.");
+        } else {
+            playtimeItem = UiKit.item(Material.BARRIER, "&7Playtime Complete",
+                    "&7Played: &f" + hours + "h",
+                    " ",
+                    "&7Every playtime reward claimed. Nice.");
+        }
+        inv.setItem(13, playtimeItem);
 
-        ItemStack claimItem = UiKit.item(Material.GOLD_NUGGET, "&e&lClaim All",
-                "&7Daily + playtime rewards",
-                "&ein one click!",
-                "&aClick to claim everything ready.");
-        inv.setItem(14, claimItem);
+        boolean anythingReady = dailyReady || ready > 0;
+        ItemStack claimItem = anythingReady
+                ? UiKit.glow(UiKit.item(Material.EMERALD_BLOCK, "&a&lClaim All",
+                        "&7Daily + playtime in one click.",
+                        " ",
+                        "&e" + UiKit.ARROW + " &e&l&nCLICK &r&eto claim everything ready."))
+                : UiKit.item(Material.GRAY_CONCRETE, "&7Nothing Ready",
+                        "&7Come back later.");
+        inv.setItem(15, claimItem);
 
-        ItemStack statusItem = UiKit.item(Material.PAPER, "&7Status",
-                "&7Daily: " + (dailyReady ? "&aREADY" : "&cCLAIMED"),
-                "&7Playtime: &f" + playtimeReady + " ready",
-                "&7Hours: &f" + hours,
-                "&e&lClick the items above to claim!");
-        inv.setItem(16, statusItem);
-
+        UiKit.checkerFill(inv, Material.BLACK_STAINED_GLASS_PANE, Material.GRAY_STAINED_GLASS_PANE);
         inv.setItem(26, UiKit.close());
 
         player.openInventory(inv);
+        UiKit.sound(player, org.bukkit.Sound.BLOCK_CHEST_OPEN, 1.2F);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (event.getClickedInventory() == null) return;
-        if (!event.getView().getTitle().equals("Daily Rewards")) return;
+        // The title carries colour codes - compare stripped. The old check
+        // compared against the uncoloured string and never matched, so no
+        // button in this menu ever did anything.
+        if (!ChatColor.stripColor(event.getView().getTitle()).equals("DAILY REWARDS")) return;
 
         event.setCancelled(true);
         ItemStack clicked = event.getCurrentItem();
         if (clicked == null || clicked.getType().isAir()) return;
+        if (clicked.getItemMeta() == null
+                || clicked.getItemMeta().getDisplayName() == null) return;
 
         String displayName = ChatColor.stripColor(clicked.getItemMeta().getDisplayName());
 
         if (displayName.contains("Daily Ready")) {
+            UiKit.sound(player, org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0F);
             rewards.command(player, new String[]{"daily"});
             player.closeInventory();
             openGui(player);
@@ -106,6 +132,7 @@ public final class RewardsGui implements Listener {
         }
 
         if (displayName.contains("Playtime Ready") || displayName.contains("Claim All")) {
+            UiKit.sound(player, org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1.0F);
             rewards.command(player, new String[]{"claimall"});
             player.closeInventory();
             openGui(player);
@@ -121,16 +148,5 @@ public final class RewardsGui implements Listener {
         String lastDate = rewards.getData().getString(
                 "players." + player.getUniqueId() + ".daily.last-date", "");
         return !LocalDate.now().toString().equals(lastDate);
-    }
-
-    private int playtimeReady(Player player, long hours) {
-        int count = 0;
-        for (var reward : rewards.playtimeRewards()) {
-            if (hours >= reward.threshold() && !rewards.getData().getBoolean(
-                    "players." + player.getUniqueId() + ".playtime.claimed." + reward.id(), false)) {
-                count++;
-            }
-        }
-        return count;
     }
 }

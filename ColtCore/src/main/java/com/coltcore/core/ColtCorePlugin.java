@@ -63,6 +63,7 @@ import com.coltcore.core.modules.DeepslateDecoyModule;
 import com.coltcore.core.modules.KelpGrowthModule;
 import com.coltcore.core.modules.StaffMonitorModule;
 import com.coltcore.core.modules.ChatGuardModule;
+import com.coltcore.core.modules.CommandTemplate;
 import com.coltcore.core.modules.ActiveRankModule;
 import com.coltcore.core.modules.DiagnosticsModule;
 import com.coltcore.core.modules.UiKit;
@@ -395,7 +396,6 @@ implements Listener {
             case "announcements" -> this.togglePreference(sender, "announcements", "Announcements");
             case "block", "ignore" -> this.block(sender, label, args);
             case "rtpqueue" -> this.rtpQueue(sender, args);
-            case "billfordtoggle" -> this.billFordModule.toggle(sender);
             case "billfordadmin" -> this.billFordModule.admin(sender, args);
             case "spawnstash" -> this.stashModule.command(sender, args);
             case "deepslatedecoy" -> this.deepslateDecoyModule.command(sender, args);
@@ -475,7 +475,6 @@ implements Listener {
             Map.entry("activerank",       "coltcore.activerank"),
             Map.entry("coltactive",       "coltcore.activerank"),
             Map.entry("redeem",           "coltcore.redeem"),
-            Map.entry("billfordtoggle",   "gildedbillford.use"),
             Map.entry("ping",             "coltcore.ping"));
 
     /** The permission a command needs, or null when it is not one of ours. */
@@ -595,7 +594,7 @@ implements Listener {
         this.startReward("KEYALL", actor, "&e", () -> {
             int count = 0;
             for (Player player : Bukkit.getOnlinePlayers()) {
-                this.dispatch(this.getConfig().getString("rewards.key-command", "crate give %player% %crate% %amount%").replace("%player%", player.getName()).replace("%crate%", crate).replace("%amount%", String.valueOf(amount)));
+                this.dispatch(CommandTemplate.expand(this.getConfig().getString("rewards.key-command", "crate give %player% %crate% %amount%"), player.getName()).replace("%crate%", CommandTemplate.safeToken(crate)).replace("%amount%", String.valueOf(amount)));
                 this.playRewardSound(player);
                 ++count;
             }
@@ -624,7 +623,7 @@ implements Listener {
         this.startReward("KITALL", actor, "&a", () -> {
             int count = 0;
             for (Player player : Bukkit.getOnlinePlayers()) {
-                for (int i = 0; i < amount; i++) this.dispatch(this.getConfig().getString("rewards.kit-command", "kit give %kit% %player%").replace("%player%", player.getName()).replace("%kit%", kit));
+                for (int i = 0; i < amount; i++) this.dispatch(CommandTemplate.expand(this.getConfig().getString("rewards.kit-command", "kit give %kit% %player%"), player.getName()).replace("%kit%", CommandTemplate.safeToken(kit)));
                 player.showTitle(Title.title((Component)this.colorComponent("&#00ff00&lYOU HAVE BEEN REWARDED"), (Component)this.colorComponent("&f" + kit + " kit")));
                 this.playRewardSound(player);
                 ++count;
@@ -662,7 +661,7 @@ implements Listener {
         this.startReward("SHARDALL", buyer, "&d", () -> {
             int count = 0;
             for (Player player : Bukkit.getOnlinePlayers()) {
-                this.dispatch(this.getConfig().getString("rewards.shard-command", "shard give %player% %amount%").replace("%player%", player.getName()).replace("%amount%", String.valueOf(amount)));
+                this.dispatch(CommandTemplate.expand(this.getConfig().getString("rewards.shard-command", "shard give %player% %amount%"), player.getName()).replace("%amount%", String.valueOf(amount)));
                 ++count;
             }
             OfflinePlayer op = Bukkit.getOfflinePlayer(buyer);
@@ -846,7 +845,7 @@ implements Listener {
             sender.sendMessage(this.color("&cUnknown or disallowed rank: &f" + rank));
             return true;
         }
-        this.dispatch(this.getConfig().getString("rankgive.command", "lp user %player% parent set %rank%").replace("%player%", args[0]).replace("%rank%", rank));
+        this.dispatch(CommandTemplate.expand(this.getConfig().getString("rankgive.command", "lp user %player% parent set %rank%"), args[0]).replace("%rank%", CommandTemplate.safeToken(rank)));
         sender.sendMessage(this.color("&aRank given: &f" + args[0] + " &8-> &e" + rank));
         return true;
     }
@@ -925,7 +924,7 @@ implements Listener {
     }
 
     private void setRank(Player actor, OfflinePlayer target, String rank, String action) {
-        this.dispatch("lp user " + target.getName() + " parent set " + rank);
+        this.dispatch("lp user " + CommandTemplate.safeName(target.getName()) + " parent set " + CommandTemplate.safeToken(rank));
         this.boxMessage(actor, "&#00ff00Staff &7action by &f" + actor.getName(), "&f" + target.getName() + " &7was &e" + action + " &7to &f" + rank + "&7.");
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (!online.hasPermission("coltcore.staffnotify") && !online.hasPermission("staffmanager.staff")) continue;

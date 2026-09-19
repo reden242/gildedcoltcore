@@ -56,6 +56,7 @@ public final class PlayerWipeModule implements Listener {
 
     private boolean enabled = true;
     private final Set<String> allowedUsernames = ConcurrentHashMap.newKeySet();
+    private boolean usernameAccess = false;
     private String guiTitle = "&8Wipe &8| &f%player%";
     private String statCommand = "statsmgr set %player% %stat% %value%";
     /** Mirror every wipe to Discord. Optional; needs DiscordSRV installed. */
@@ -120,6 +121,7 @@ public final class PlayerWipeModule implements Listener {
         this.fullWipe = null;
         if (c == null) { this.enabled = false; return; }
         this.enabled = c.getBoolean("enabled", true);
+        this.usernameAccess = c.getBoolean("allow-username-access", false);
         this.allowedUsernames.clear();
         for (String name : c.getStringList("allowed-usernames")) {
             String normalized = normalizeName(name);
@@ -127,6 +129,12 @@ public final class PlayerWipeModule implements Listener {
         }
         String legacyOwner = normalizeName(c.getString("owner-name", ""));
         if (!legacyOwner.isBlank()) this.allowedUsernames.add(legacyOwner);
+        if (!this.usernameAccess && !this.allowedUsernames.isEmpty()) {
+            this.plugin.getLogger().warning("[PlayerWipe] allowed-usernames/owner-name"
+                    + " configured but allow-username-access is off - names are"
+                    + " spoofable, so they are ignored. Grant coltcore.playerwipe"
+                    + " or set allow-username-access: true to re-enable.");
+        }
         this.guiTitle = c.getString("gui-title", this.guiTitle);
         this.statCommand = c.getString("stat-command", this.statCommand);
         ConfigurationSection dl = c.getConfigurationSection("discord-log");
@@ -217,7 +225,11 @@ public final class PlayerWipeModule implements Listener {
 
     /** Permission node or a configured username. Legacy owner-name stays additive. */
     private boolean allowed(Player p) {
-        return p.hasPermission(PERM) || this.allowedUsernames.contains(normalizeName(p.getName()));
+        if (p.hasPermission(PERM)) return true;
+        // Names are not authentication: offline-mode and misconfigured
+        // proxies let anyone join as any name, and this menu runs console
+        // commands. The username path only exists behind an explicit opt-in.
+        return this.usernameAccess && this.allowedUsernames.contains(normalizeName(p.getName()));
     }
 
     private static String normalizeName(String name) {
@@ -294,8 +306,8 @@ public final class PlayerWipeModule implements Listener {
             if (slot >= inv.getSize() - 9) break;
             inv.setItem(slot++, UiKit.card(Material.PAPER, "&b" + stat, "Reset this counter",
                     List.of("Runs: " + this.statCommand
-                            .replace("%player%", s.target)
-                            .replace("%stat%", stat)
+                            .replace("%player%", CommandTemplate.safeName(s.target))
+                            .replace("%stat%", CommandTemplate.safeToken(stat))
                             .replace("%value%", "0")),
                     null, "to select"));
         }
@@ -609,8 +621,8 @@ public final class PlayerWipeModule implements Listener {
             List<String> stats = "all".equals(choice) ? cat.stats : List.of(choice);
             for (String stat : stats) {
                 out.add(this.statCommand
-                        .replace("%player%", target)
-                        .replace("%stat%", stat)
+                        .replace("%player%", CommandTemplate.safeName(target))
+                        .replace("%stat%", CommandTemplate.safeToken(stat))
                         .replace("%value%", "0")
                         .replaceFirst("^/", ""));
             }
@@ -625,10 +637,11 @@ public final class PlayerWipeModule implements Listener {
     private static List<String> expand(List<String> templates, String player,
                                        String amount, String stat) {
         List<String> out = new ArrayList<>();
+        String safePlayer = CommandTemplate.safeName(player);
         for (String t : templates) {
             if (t == null || t.isBlank()) continue;
-            out.add(t.replace("%player%", player)
-                     .replace("%PLAYER%", player)
+            out.add(t.replace("%player%", safePlayer)
+                     .replace("%PLAYER%", safePlayer)
                      .replace("%amount%", amount)
                      .replace("%stat%", stat == null ? "" : stat)
                      .replaceFirst("^/", ""));

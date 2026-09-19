@@ -26,7 +26,7 @@ import java.util.Random;
  * context. Deciding whether a chat line is abuse needs neither: the evidence is
  * which n-grams are present, not what order they arrive in. This is the
  * fastText architecture, which was designed for exactly this trade and remains
- * the right one â€” a shared embedding table gives the statistical strength that
+ * the right one — a shared embedding table gives the statistical strength that
  * a plain linear model lacks, at a fraction of a transformer's cost.
  *
  * <p>Concretely, against the linear model it replaces: the embedding table lets
@@ -69,7 +69,7 @@ public final class NeuralModel {
      *
      * <p>This is not a permanent ceiling. Every reviewed punishment adds a
      * gold-standard example, and once the corpus is several times larger the
-     * larger geometries should overtake â€” which is why the size is a config
+     * larger geometries should overtake — which is why the size is a config
      * setting and not a constant. Re-run the sweep before raising it.
      */
     public static final int BUCKETS = 1 << 17;          // 131072

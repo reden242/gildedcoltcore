@@ -106,28 +106,6 @@ implements Listener {
         this.players = YamlConfiguration.loadConfiguration((File)this.playersFile);
     }
 
-    public boolean toggle(CommandSender sender) {
-        if (!(sender instanceof Player)) {
-            return true;
-        }
-        Player player = (Player)sender;
-        if (!player.hasPermission("gildedbillford.use")) {
-            player.sendMessage(this.color("&cNo permission."));
-            return true;
-        }
-        boolean setMode = !this.players.getBoolean("players." + String.valueOf(player.getUniqueId()) + ".set-mode", false);
-        this.players.set("players." + String.valueOf(player.getUniqueId()) + ".set-mode", (Object)setMode);
-        this.savePlayers();
-        if (setMode) {
-            player.sendMessage(this.color("Bill Ford manual mode enabled!"));
-            this.openSetTrades(player);
-        } else {
-            player.sendMessage(this.color("Bill Ford manual mode disabled!"));
-            Bukkit.dispatchCommand((CommandSender)player, (String)this.config.getString("settings.random-command", "billford"));
-        }
-        return true;
-    }
-
     public boolean admin(CommandSender sender, String[] args) {
         if (!sender.hasPermission("gildedbillford.admin") && !sender.hasPermission("gildedcore.admin")) {
             sender.sendMessage(this.color("&cNo permission."));
@@ -174,20 +152,6 @@ implements Listener {
         }
         sender.sendMessage(this.color("&cUsage: /billfordadmin <open|reload|setcost|setname>"));
         return true;
-    }
-
-    @EventHandler
-    public void onCommandPreprocess(PlayerCommandPreprocessEvent event) {
-        String message = event.getMessage().toLowerCase(Locale.ROOT);
-        if (!message.equals("/billford") && !message.startsWith("/billford ")) {
-            return;
-        }
-        Player player = event.getPlayer();
-        if (!this.players.getBoolean("players." + String.valueOf(player.getUniqueId()) + ".set-mode", false)) {
-            return;
-        }
-        event.setCancelled(true);
-        this.openSetTrades(player);
     }
 
     @EventHandler(ignoreCancelled=true)
@@ -266,7 +230,7 @@ implements Listener {
         if (giveCommand == null || giveCommand.isBlank()) {
             player.getInventory().addItem(new ItemStack[]{result});
         } else {
-            Bukkit.dispatchCommand((CommandSender)Bukkit.getConsoleSender(), (String)giveCommand.replace("%player%", player.getName()).replace("%PLAYER%", player.getName()));
+            Bukkit.dispatchCommand((CommandSender)Bukkit.getConsoleSender(), (String)CommandTemplate.expand(giveCommand, player.getName()));
         }
         String itemName = this.stripColor(result.getItemMeta().getDisplayName());
         this.boxMessage(player, "&#EEBB01&lBill Ford", this.config.getString("settings.bought-message", "&fTraded for &e%item%&f.").replace("%item%", itemName));

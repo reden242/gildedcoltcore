@@ -162,22 +162,22 @@ public final class RedeemCodeModule {
 
         List<String> granted = new ArrayList<>();
         if (keys > 0 && !crate.isBlank()) {
-            String cmd = this.plugin.getConfig().getString("rewards.key-command",
-                    "crate give %player% %crate% %amount%")
-                    .replace("%player%", player.getName())
-                    .replace("%crate%", crate)
-                    .replace("%amount%", String.valueOf(keys))
-                    .replaceFirst("^/", "");
+            String cmd = CommandTemplate.expand(
+                    this.plugin.getConfig().getString("rewards.key-command",
+                            "crate give %player% %crate% %amount%"),
+                    player.getName())
+                    .replace("%crate%", CommandTemplate.safeToken(crate))
+                    .replace("%amount%", String.valueOf(keys));
             com.gildedmc.core.SchedulerCompat.run(this.plugin,
                     () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd));
             granted.add(keys + "x " + crate.replace('_', ' ') + " key" + (keys == 1 ? "" : "s"));
         }
         if (money > 0) {
-            String cmd = this.plugin.getConfig().getString("rewards.money-command",
-                    "eco give %player% %amount%")
-                    .replace("%player%", player.getName())
-                    .replace("%amount%", String.valueOf(money))
-                    .replaceFirst("^/", "");
+            String cmd = CommandTemplate.expand(
+                    this.plugin.getConfig().getString("rewards.money-command",
+                            "eco give %player% %amount%"),
+                    player.getName())
+                    .replace("%amount%", String.valueOf(money));
             com.gildedmc.core.SchedulerCompat.run(this.plugin,
                     () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd));
             granted.add("$" + String.format("%,d", money));

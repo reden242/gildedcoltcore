@@ -710,9 +710,8 @@ public final class StaffMacroModule implements Listener {
                 + " :: " + (v == null ? "unverified" : v.toString())));
 
         for (String template : this.flagCommands) {
-            String cmd = template.replace("%player%", p.getName())
-                    .replace("%reason%", ChatColor.stripColor(reason == null ? "afk macro" : reason))
-                    .replaceFirst("^/", "");
+            String cmd = CommandTemplate.expand(template, p.getName())
+                    .replace("%reason%", ChatColor.stripColor(reason == null ? "afk macro" : reason));
             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
         }
     }

@@ -457,7 +457,12 @@ public final class StashModule implements Listener {
 
     private static String esc(String s) {
         if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
+        // Quotes and backslashes first (they delimit), then every remaining
+        // ISO control char goes - a tab or NUL in a player name would
+        // otherwise produce invalid JSON and silently kill the webhook.
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+                .replaceAll("\\p{Cntrl}", "");
     }
 
     /* ------------------------------------------------------------------ */

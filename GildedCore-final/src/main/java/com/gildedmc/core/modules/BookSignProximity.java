@@ -1,4 +1,4 @@
-package com.coltcore.core.modules;
+package com.gildedmc.core.modules;
 
 import java.util.UUID;
 

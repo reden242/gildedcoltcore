@@ -40,6 +40,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class CreativeGuardModule
 implements Listener {
     private final JavaPlugin plugin;
+    private boolean ownerNamesWarned = false;
 
     public CreativeGuardModule(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -98,9 +99,15 @@ implements Listener {
         if (permission != null && !permission.isBlank() && player.hasPermission(permission)) {
             return true;
         }
-        for (String name : this.plugin.getConfig().getStringList("creative-guard.owner-names")) {
-            if (!player.getName().equalsIgnoreCase(name)) continue;
-            return true;
+        // owner-names used to bypass here. Removed: names are spoofable on
+        // offline-mode / misconfigured-proxy servers, and the bypass
+        // permission above already covers the owners. A non-empty list is
+        // reported once so nobody wonders where their bypass went.
+        if (!this.plugin.getConfig().getStringList("creative-guard.owner-names").isEmpty()
+                && !this.ownerNamesWarned) {
+            this.ownerNamesWarned = true;
+            this.plugin.getLogger().warning("[CreativeGuard] creative-guard.owner-names"
+                    + " is ignored - grant " + permission + " instead.");
         }
         return false;
     }

@@ -1052,6 +1052,7 @@ chat-guard:
     allow:
       - gildedmc.net
       - discord.gg/gildedmc
+      - gildedmc.pro
     # Skip IPv4 matches shaped like a Minecraft version ("1.21.4.1").
     ignore-version-like: true
 

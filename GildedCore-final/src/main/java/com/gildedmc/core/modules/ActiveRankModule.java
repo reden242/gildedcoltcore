@@ -224,10 +224,9 @@ public final class ActiveRankModule implements Listener {
     }
 
     private void dispatch(String template, String player, String hours) {
-        String cmd = template.replace("%player%", player)
-                             .replace("%rank%", this.rank)
-                             .replace("%hours%", hours)
-                             .replaceFirst("^/", "");
+        String cmd = CommandTemplate.expand(template, player)
+                             .replace("%rank%", CommandTemplate.safeToken(this.rank))
+                             .replace("%hours%", hours);
         if (cmd.isBlank()) return;
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
     }

@@ -77,10 +77,6 @@ commands:
     description: Queue players for one shared RTP drop.
     usage: /rtpqueue
     permission: gildedcore.rtpqueue
-  billfordtoggle:
-    description: Toggle BillFord set trades.
-    usage: /billfordtoggle
-    permission: gildedbillford.use
   billfordadmin:
     description: Manage BillFord set trades.
     usage: /billfordadmin <open|reload|setcost|setname>
@@ -225,8 +221,6 @@ permissions:
     default: op
   gildedcore.ping:
     description: Show your own or another player's ping.
-    default: true
-  gildedbillford.use:
     default: true
   gildedbillford.admin:
     default: op

@@ -1,4 +1,4 @@
-package com.coltcore.core.modules;
+package com.gildedmc.core.modules;
 
 import org.bukkit.Location;
 import org.bukkit.block.Block;

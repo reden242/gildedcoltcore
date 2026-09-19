@@ -4,8 +4,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -71,6 +73,62 @@ public final class UiKit {
 
     public static String strip(String text) {
         return ChatColor.stripColor(colour(text));
+    }
+
+    /**
+     * Per-character colour blend from one hex colour to another, for short
+     * titles. Existing &amp;-codes pass through untouched; every other
+     * character is recoloured along the gradient. Null-safe.
+     */
+    public static String gradient(String text, String fromHex, String toHex) {
+        if (text == null) return "";
+        int[] from = parseHex(fromHex);
+        int[] to = parseHex(toHex);
+        StringBuilder plain = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '&' && i + 1 < text.length()) { i++; continue; }
+            if (c == '§' && i + 1 < text.length()) { i++; continue; }
+            plain.append(c);
+        }
+        int n = 0;
+        for (int i = 0; i < plain.length(); i++) if (plain.charAt(i) != ' ') n++;
+        StringBuilder out = new StringBuilder();
+        int seen = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c == '&' || c == '§') && i + 1 < text.length()) {
+                out.append(c).append(text.charAt(i + 1));
+                i++;
+                continue;
+            }
+            if (c == ' ' || n <= 1) { out.append(c); continue; }
+            double t = (double) seen++ / (n - 1);
+            int r = (int) (from[0] + (to[0] - from[0]) * t);
+            int g = (int) (from[1] + (to[1] - from[1]) * t);
+            int b = (int) (from[2] + (to[2] - from[2]) * t);
+            out.append(String.format("§x§%c§%c§%c§%c§%c§%c%c",
+                    hexChar(r >> 4), hexChar(r), hexChar(g >> 4), hexChar(g),
+                    hexChar(b >> 4), hexChar(b), c));
+        }
+        return out.toString();
+    }
+
+    private static int[] parseHex(String hex) {
+        int[] rgb = {255, 255, 255};
+        if (hex == null) return rgb;
+        String h = hex.startsWith("#") ? hex.substring(1) : hex;
+        if (h.length() != 6) return rgb;
+        try {
+            rgb[0] = Integer.parseInt(h.substring(0, 2), 16);
+            rgb[1] = Integer.parseInt(h.substring(2, 4), 16);
+            rgb[2] = Integer.parseInt(h.substring(4, 6), 16);
+        } catch (NumberFormatException ignored) { }
+        return rgb;
+    }
+
+    private static char hexChar(int v) {
+        return "0123456789abcdef".charAt(v & 0xF);
     }
 
     /* ------------------------------------------------------------------ */
@@ -163,6 +221,71 @@ public final class UiKit {
                 if (edge && inv.getItem(slot) == null) inv.setItem(slot, pane);
             }
         }
+    }
+
+    /**
+     * Border with accent corners: edges in one glass, the four corners in
+     * another. Reads as a frame rather than a backdrop.
+     */
+    public static void framed(Inventory inv, Material edge, Material corner) {
+        ItemStack edgePane = item(edge, " ");
+        ItemStack cornerPane = item(corner, " ");
+        int rows = inv.getSize() / 9;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < 9; c++) {
+                boolean isEdge = r == 0 || r == rows - 1 || c == 0 || c == 8;
+                if (!isEdge) continue;
+                int slot = r * 9 + c;
+                if (inv.getItem(slot) != null) continue;
+                boolean isCorner = (r == 0 || r == rows - 1) && (c == 0 || c == 8);
+                inv.setItem(slot, isCorner ? cornerPane : edgePane);
+            }
+        }
+    }
+
+    /** Alternating two-glass backdrop on empty slots. */
+    public static void checkerFill(Inventory inv, Material first, Material second) {
+        ItemStack a = item(first == null ? Material.BLACK_STAINED_GLASS_PANE : first, " ");
+        ItemStack b = item(second == null ? Material.GRAY_STAINED_GLASS_PANE : second, " ");
+        for (int i = 0; i < inv.getSize(); i++) {
+            if (inv.getItem(i) != null) continue;
+            inv.setItem(i, ((i / 9 + i % 9) % 2 == 0) ? a : b);
+        }
+    }
+
+    /**
+     * Lore progress bar, e.g. {@code ████████░░░░ 8/12}. Fraction is clamped
+     * to 0-1; colours are &amp;-code strings.
+     */
+    public static String progressBar(double fraction, int width, String filledColour,
+                                     String emptyColour, String current, String target) {
+        double f = Math.max(0.0D, Math.min(1.0D, fraction));
+        int w = Math.max(4, Math.min(30, width));
+        int filled = (int) Math.round(f * w);
+        StringBuilder bar = new StringBuilder();
+        for (int i = 0; i < filled; i++) bar.append('█');
+        String head = bar.toString();
+        bar.setLength(0);
+        for (int i = filled; i < w; i++) bar.append('█');
+        return (filledColour == null ? "&a" : filledColour) + head
+                + (emptyColour == null ? "&8" : emptyColour) + bar
+                + " &7" + current + "&8/&7" + target;
+    }
+
+    /**
+     * Enchant-glint without enchantment text, for "ready to claim" items.
+     * Returns the same stack for chaining.
+     */
+    public static ItemStack glow(ItemStack stack) {
+        if (stack == null) return null;
+        try {
+            ItemMeta meta = stack.getItemMeta();
+            if (meta == null) return stack;
+            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+            stack.setItemMeta(meta);
+        } catch (Throwable ignored) { }
+        return stack;
     }
 
     public static ItemStack back(String where) {

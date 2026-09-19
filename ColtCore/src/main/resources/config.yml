@@ -1069,6 +1069,8 @@ chat-guard:
     allow:
       - coltcore.net
       - discord.gg/coltcore
+      - coltmc.bond
+      - coltmc.dpdns.org
     # Skip IPv4 matches shaped like a Minecraft version ("1.21.4.1").
     ignore-version-like: true
 

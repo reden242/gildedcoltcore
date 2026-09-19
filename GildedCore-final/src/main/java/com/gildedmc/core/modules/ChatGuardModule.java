@@ -99,6 +99,8 @@ public final class ChatGuardModule implements Listener {
     private ReviewModule review;
     /** Layer 2/3 of the anti-ad pipeline; null until the main class wires it. */
     private AntiAdPipeline antiAd;
+    /** 5-layer context-aware anti-ad system; null until wired. */
+    private ContextAwareAntiAd contextAwareAntiAd;
 
     private boolean enabled;
     private int repeatFastPath = 2;
@@ -161,9 +163,6 @@ public final class ChatGuardModule implements Listener {
     private boolean contextVerbose;
     private final Map<UUID, Deque<Long>> recent = new ConcurrentHashMap<>();
     private final Map<UUID, Deque<String>> lastMessages = new ConcurrentHashMap<>();
-    /** Conversation context — the last few messages per player, for the model. */
-    private final Map<UUID, Deque<String>> chatHistory = new ConcurrentHashMap<>();
-    private static final int HISTORY_DEPTH = 6;
 
     public ChatGuardModule(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -448,6 +447,9 @@ public final class ChatGuardModule implements Listener {
     /** Wires the anti-ad pipeline (layers 2 and 3) from the main class. */
     public void setAntiAd(AntiAdPipeline antiAd) { this.antiAd = antiAd; }
 
+    /** Wires the 5-layer context-aware anti-ad system. */
+    public void setContextAwareAntiAd(ContextAwareAntiAd ctx) { this.contextAwareAntiAd = ctx; }
+
     private void readConfig() {
         ConfigurationSection c = this.plugin.getConfig().getConfigurationSection("chat-guard");
         if (c == null) { this.enabled = false; return; }
@@ -500,12 +502,13 @@ public final class ChatGuardModule implements Listener {
             for (String a : adv.getStringList("allow")) {
                 if (a != null && !a.isBlank()) this.advertAllow.add(a.toLowerCase(Locale.ROOT).trim());
             }
-            this.advertAllow.add("minepvp");
-            this.advertAllow.add("minepvp.net");
-            this.advertAllow.add("minepvp.com");
-            // The owner's own networks. Suffix matching in allowed() means
-            // play./discord./any subdomain of these pass too.
-            this.advertAllow.add("gildedmc.pro");
+            // The pipeline's own-domain joins the same list, so there is one
+            // editable source of truth. No hostnames are baked into source any
+            // more: cross-tenant residue (other networks' hosts) cannot hide here.
+            if (this.antiAd != null) {
+                String own = this.antiAd.getOwnDomain();
+                if (own != null && !own.isBlank()) this.advertAllow.add(own.toLowerCase(Locale.ROOT).trim());
+            }
         }
 
         this.ladderCommands.clear();
@@ -712,28 +715,8 @@ public final class ChatGuardModule implements Listener {
      * MONITOR priority and no ignoreCancelled: a message another plugin
      * cancelled was still typed, and is still evidence.
      */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onChatRecord(AsyncChatEvent event) {
-        // Conversation context: keep the player's last few messages so the
-        // classifier and the logic centre can see sarcasm, ongoing banter, or
-        // an advert campaign spread across short messages.
-        Deque<String> hist = this.chatHistory.computeIfAbsent(event.getPlayer().getUniqueId(),
-                k -> new ArrayDeque<>());
-        synchronized (hist) {
-            hist.addLast(PlainTextComponentSerializer.plainText().serialize(event.message()));
-            while (hist.size() > HISTORY_DEPTH) hist.pollFirst();
-        }
-    }
-
-    private java.util.List<String> contextFor(UUID id) {
-        Deque<String> hist = this.chatHistory.get(id);
-        if (hist == null || hist.isEmpty()) return java.util.List.of();
-        synchronized (hist) { return new ArrayList<>(hist); }
-    }
-
     @EventHandler
     public void onContextQuit(org.bukkit.event.player.PlayerQuitEvent event) {
-        this.chatHistory.remove(event.getPlayer().getUniqueId());
         this.advertContext.clear(event.getPlayer().getUniqueId());
         if (this.antiAd != null) this.antiAd.clear(event.getPlayer().getUniqueId());
     }
@@ -1027,8 +1010,47 @@ public final class ChatGuardModule implements Listener {
         return false;
     }
 
+    /**
+     * TPA auto-accept chatter ("my tpa auto is on, I accept all tpas")
+     * scored 0.9554 with nowhere to go. Teleport-request talk without any
+     * address is not an advert, so it never reaches the pipeline.
+     */
+    private boolean isTpaAutoAccept(String raw) {
+        if (raw == null) return false;
+        String s = raw.toLowerCase(Locale.ROOT);
+        if (!s.contains("tpa")) return false;
+        if (!s.contains("auto") && !s.contains("accept all") && !s.contains("always accept")) return false;
+        return advertHit(raw) == null
+                && AdvertContext.find(raw, advertForm(raw)) == null;
+    }
+
+    /**
+     * In-game shop talk about the server's own mystery boxes, with no
+     * address anywhere, is trade chat - not advertising another server.
+     * Anything carrying an address still goes through the full pipeline.
+     */
+    private boolean isOwnFeatureShop(String raw) {
+        if (raw == null) return false;
+        String s = raw.toLowerCase(Locale.ROOT);
+        if (!s.contains("mystery box") && !s.contains("mysterybox")
+                && !s.contains("mystery-box")) return false;
+        return advertHit(raw) == null
+                && AdvertContext.find(raw, advertForm(raw)) == null;
+    }
+
     /** Layers 1-3 of the advertising pipeline. Layer 0 is advertForm(). */
     private boolean screenAdvertising(Player player, String raw, String source) {
+        // Layer 5: context-aware 5-layer anti-ad system runs first.
+        if (this.contextAwareAntiAd != null) {
+            ContextAwareAntiAd.AdVerdict verdict = this.contextAwareAntiAd.checkChat(player, raw);
+            if (verdict.block()) {
+                return blockAdvertising(player, raw, source,
+                        "context-aware (" + verdict.reason() + ")",
+                        raw.contains("/") || raw.contains(".") ? CAT_ADVERT : CAT_LIGHT_ADVERT,
+                        "L5-context", verdict.confidence());
+            }
+        }
+
         String address = advertHit(raw);
         AdvertContext.Hit soft = address == null
                 ? AdvertContext.find(raw, advertForm(raw)) : null;
@@ -1052,6 +1074,19 @@ public final class ChatGuardModule implements Listener {
                     "L1+L2", advertisingProbability);
         }
         if (advertisingProbability >= 0.0D && advertisingProbability < 0.40D) {
+            // L1 or L2 - never L2 instead of L1.
+            //
+            // A low score may overrule a guess and nothing else. When layer one
+            // matched an address the player actually wrote, or layer 3's
+            // address-grade context did, the classifier does not get to veto it;
+            // see addressGradeEvidence. What the clear still exists for is the
+            // light, name-only context hits, which are the weakest signal in the
+            // pipeline and the reason the branch was added.
+            if (addressGradeEvidence(raw, address, soft)) {
+                return blockAdvertising(player, raw, source, evidence, CAT_ADVERT,
+                        "L1 (L2 " + String.format(java.util.Locale.ROOT, "%.2f", advertisingProbability) + ")",
+                        patternConfidence);
+            }
             this.plugin.getLogger().info("[LocalAI] L1 false positive cleared: " + raw);
             if (this.antiAd != null) {
                 this.antiAd.log(player.getName(), source, raw, evidence,
@@ -1168,7 +1203,18 @@ public final class ChatGuardModule implements Listener {
     }
 
     private boolean screen(Player p, String raw, String source) {
-        if (isBenignElongation(raw) || isRankMention(raw)) return false;
+        // The benign exits below answer "does this message mention something
+        // harmless?". That is not "this message is harmless". "play.gildedmc.pro"
+        // mentions the server's own name and is an advertisement for it, and so
+        // is any advert that happens to contain an online player's name. An
+        // address is the one signal that outranks a benign mention, so the
+        // exits only apply when the deterministic sources found nothing.
+        // Narrow gate on purpose: the heuristic bare path that F1 widens must
+        // not be able to switch the benign filter off for ordinary messages.
+        boolean typed = advertHit(raw) != null
+                || AdvertContext.find(raw, advertForm(raw)) != null;
+        if ((isBenignElongation(raw) || isRankMention(raw)) && !typed) return false;
+        if (isTpaAutoAccept(raw) || isOwnFeatureShop(raw)) return false;
         // Structural detectors run FIRST, ahead of advertising.
         //
         // Order matters and testing proved it: "his email is bob@gmail.com" was
@@ -1269,31 +1315,6 @@ public final class ChatGuardModule implements Listener {
         // put ordinary profanity on the hate ladder.
         if (termHits(exempt(raw)) > 0) return termCategory(raw);
         return null;
-    }
-
-    /**
-     * Gathers the deterministic evidence and asks {@link ContextCheck} about it.
-     *
-     * <p>Every field here has already been computed once on this message, so the
-     * only cost is the address lookup, which is a regex over a short string.
-     */
-    ContextCheck.Result contextCheck(String label, String raw) {
-        if (!this.contextAware) {
-            return new ContextCheck.Result(ContextCheck.Action.PUNISH, label, "context check off");
-        }
-        String masked = exempt(raw);
-        boolean address = this.advertEnabled
-                && (advertHit(raw) != null
-                    || AdvertContext.find(raw, advertForm(raw)) != null
-                    || bareAddress(advertForm(raw), this.commonWordSet) != null);
-        boolean slur = hateTermHit(masked) || phoneticHit(raw) != null;
-        boolean sexual = profanityTermHit(masked);
-        boolean aimed = SECOND_PERSON.matcher(Scripts.words(raw)).find();
-        LinearModel.Prediction p = this.local.classify(raw);
-        return ContextCheck.assess(label,
-                p == null ? 1.0D : p.confidence(),
-                p == null ? java.util.Map.of() : p.scores(),
-                new ContextCheck.Evidence(address, slur, sexual, aimed, raw.length()));
     }
 
     /** Whether any HATE term matches. Separate from profanity on purpose. */
@@ -1522,12 +1543,11 @@ public final class ChatGuardModule implements Listener {
 
             String template = this.ladderCommands.get(rung.action());
             if (template != null && !template.isBlank()) {
-                String cmd = template.replace("%player%", name)
+                String cmd = CommandTemplate.expand(template, name)
                         .replace("%duration%", rung.permanent()
                                 ? "permanent" : MuteStore.humanise(rung.durationMs()))
                         .replace("%reason%", reason)
-                        .replace("%ip%", ip == null ? "" : ip)
-                        .replaceFirst("^/", "");
+                        .replace("%ip%", ip == null ? "" : ip);
                 SchedulerCompat.run(this.plugin,
                         () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd));
             }
@@ -1794,12 +1814,41 @@ public final class ChatGuardModule implements Listener {
         return bareAddress(advertFormed, java.util.Set.of());
     }
 
+    /** Whether any deterministic layer found an address. For L5's evidence gate. */
+    static boolean addressPresent(String raw) {
+        // advertHit is an instance method; the caller-supplied form is enough
+        // here because this is a gate, not a verdict.
+        String s = advertForm(raw);
+        return bareAddress(s, java.util.Set.of()) != null
+                || AdvertContext.find(raw, s) != null;
+    }
+
+    /**
+     * Shared address-like test for sign and rename context. One copy lives
+     * here, beside the other detection helpers, so the trackers cannot drift.
+     *
+     * <p>The word list is deliberately narrower than it used to be:
+     * {@code play}, {@code come} and {@code visit} are ordinary English
+     * ("come here", "play together" are not addresses) and disagreed with
+     * {@link #HOSTLIKE}, which removed {@code play} for the same reason.
+     */
+    static boolean looksLikeAddress(String text) {
+        if (text == null || text.length() < 3) return false;
+        return text.contains(".") || text.contains("/") || text.contains(":")
+                || text.matches(".*\\b(ip|server|mc|join)\\b.*");
+    }
+
     /**
      * @param common ordinary English, from commonwords.txt. A label that is an
      *               ordinary word is not a hostname, and this is the only thing
      *               separating "play gildedmc pro" from "best pro player online"
      */
     static String bareAddress(String advertFormed, java.util.Set<String> common) {
+        return bareAddress(advertFormed, common, false);
+    }
+
+    static String bareAddress(String advertFormed, java.util.Set<String> common,
+                              boolean hostlikeOnly) {
         if (advertFormed == null || advertFormed.isBlank()) return null;
         String[] words = advertFormed.split("[^a-z0-9]+");
         boolean invited = false;
@@ -1817,7 +1866,7 @@ public final class ChatGuardModule implements Listener {
                 continue;
             }
             String label = words[i - 1];
-            if (!plausibleLabel(label, common, invited)) continue;
+            if (!plausibleLabel(label, common, invited, hostlikeOnly)) continue;
             String prefix = i >= 2 ? words[i - 2] : "";
             boolean twoLabels = prefix.length() >= 2 && !STOPWORDS.contains(prefix)
                     && !common.contains(prefix);
@@ -1848,7 +1897,7 @@ public final class ChatGuardModule implements Listener {
                 // a separate word and means something; inside a single token it
                 // is just a substring that happened to be present elsewhere in
                 // the sentence, and it let ordinary words through.
-                if (!plausibleLabel(label, common, false)) continue;
+                if (!plausibleLabel(label, common, false, hostlikeOnly)) continue; // joined path
                 return label + "." + tld;
             }
         }
@@ -1890,6 +1939,19 @@ public final class ChatGuardModule implements Listener {
 
     private static boolean plausibleLabel(String label, java.util.Set<String> common,
                                           boolean invited) {
+        return plausibleLabel(label, common, invited, false);
+    }
+
+    /**
+     * @param hostlikeOnly the leet path's mode. {@link TextFeatures#unleet}
+     *        deletes every digit, and the digit is exactly what
+     *        {@code plausibleLabel} leans on to reject ordinary text with
+     *        numbers in it. So on a folded-alphabet label only a
+     *        {@link #HOSTLIKE} substring counts; the length fallback is not
+     *        reachable, or "lvl100pro" becomes "lvlioo.pro".
+     */
+    private static boolean plausibleLabel(String label, java.util.Set<String> common,
+                                          boolean invited, boolean hostlikeOnly) {
         if (label == null || label.length() < 4) return false;
         if (STOPWORDS.contains(label)) return false;
         // The invitation word cannot also be the hostname. "dirk im gonna hop
@@ -1899,6 +1961,7 @@ public final class ChatGuardModule implements Listener {
         // A player's own name is never treated as a host.
         if (isKnownPlayerName(label)) return false;
         for (String h : HOSTLIKE) if (label.contains(h)) return true;
+        if (hostlikeOnly) return false;                 // ← the only new line
         // No invitation needed any more: every TLD counts, and the only things
         // still protecting ordinary chat are the common-word list above and the
         // player-name check. A digit-bearing token without an invitation is
@@ -1931,7 +1994,31 @@ public final class ChatGuardModule implements Listener {
             if (isKnownPlayerName(label) || isKnownPlayerName(bare.replace(".", ""))) return null;
             return bare;
         }
+
+        // The leet sibling. Computed BESIDE the primary form, never in place of
+        // it: unleet maps digits to letters, so folding "51.79.82.14" would give
+        // "si.tg.bi.ia" and delete the IPV4 match outright. Unioned, primary
+        // first because a typed or literal address is the stronger evidence.
+        //
+        // Only the bare path is re-evaluated. unleet is a 1:1 substitution, so
+        // it cannot move any length-based gate, and credibleHost's typed-dot
+        // branch already ignores label content - a second typed pass detects
+        // nothing new and only adds false positives.
+        String leet = leetForm(s);
+        if (leet != null) {
+            String leetBare = bareAddress(leet, this.commonWordSet, true);
+            if (leetBare != null && !allowed(leetBare, "")) {
+                String label = leetBare.contains(".") ? leetBare.substring(0, leetBare.indexOf('.')) : leetBare;
+                if (isKnownPlayerName(label) || isKnownPlayerName(leetBare.replace(".", ""))) return null;
+                return leetBare;
+            }
+        }
         return null;
+    }
+
+    private static String leetForm(String advertFormed) {
+        String leet = TextFeatures.unleet(advertFormed);
+        return leet.equals(advertFormed) ? null : leet;
     }
 
     /**
@@ -1950,7 +2037,8 @@ public final class ChatGuardModule implements Listener {
      * {@link #credibleHost} decides between a typed dot and a reconstructed one
      * by looking at what the player actually wrote.
      */
-    private String typedAdvertHit(String raw, String s) {
+    /** Package-private seam for the probe suite (§9): calls the shipped code. */
+    String typedAdvertHit(String raw, String s) {
         Matcher ip = IPV4.matcher(s);
         while (ip.find()) {
             int a = num(ip.group(1)), b = num(ip.group(2)), c = num(ip.group(3)), d = num(ip.group(4));
@@ -2053,7 +2141,8 @@ public final class ChatGuardModule implements Listener {
      * to an invitation, because a substitution is a guess and a guess should
      * carry less weight than something someone actually typed.
      */
-    private boolean credibleHost(String labels, String tld, String raw) {
+    /** Package-private seam for the probe suite (§9): calls the shipped code. */
+    boolean credibleHost(String labels, String tld, String raw) {
         if (!Tlds.isTld(tld)) return false;
         String last = labels;
         int dot = last.lastIndexOf('.');

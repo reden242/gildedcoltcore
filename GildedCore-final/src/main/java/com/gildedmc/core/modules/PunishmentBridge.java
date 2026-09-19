@@ -166,15 +166,13 @@ public final class PunishmentBridge {
                 return new Result(false, Backend.LITEBANS, null,
                         "no LiteBans command configured for " + key);
             }
-            String cmd = template
-                    .replace("%player%", player)
+            String cmd = CommandTemplate.expand(template, player)
                     .replace("%duration%", liteBansDuration(durationMs))
                     .replace("%reason%", reason == null ? "Unspecified" : reason)
-                    .replace("%staff%", staff == null ? "Console" : staff)
+                    .replace("%staff%", staff == null ? "Console" : CommandTemplate.safeName(staff))
                     .replace("%ip%", ip == null ? "" : ip)
                     .replaceAll("\\s{2,}", " ")
-                    .trim()
-                    .replaceFirst("^/", "");
+                    .trim();
             dispatch(cmd);
             return new Result(true, Backend.LITEBANS, cmd, null);
         }
@@ -221,7 +219,7 @@ public final class PunishmentBridge {
         if (this.backend == Backend.LITEBANS) {
             String template = this.templates.get(act.startsWith("BAN") ? "UNBAN" : "UNMUTE");
             if (template == null || template.isBlank()) return 0;
-            dispatch(template.replace("%player%", player).replaceFirst("^/", ""));
+            dispatch(CommandTemplate.expand(template, player));
             return 1;
         }
         return act.startsWith("BAN") ? this.store.unban(player) : this.store.unmute(player);

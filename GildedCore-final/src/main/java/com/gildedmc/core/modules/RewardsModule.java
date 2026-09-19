@@ -205,7 +205,7 @@ public final class RewardsModule {
 
     private void execute(Player player, Reward reward, int streak, long hours) {
         for (String command : reward.commands) {
-            String expanded = command.replace("%player%", player.getName())
+            String expanded = CommandTemplate.expand(command, player.getName())
                     .replace("%uuid%", player.getUniqueId().toString())
                     .replace("%reward%", reward.id)
                     .replace("%streak%", String.valueOf(streak))

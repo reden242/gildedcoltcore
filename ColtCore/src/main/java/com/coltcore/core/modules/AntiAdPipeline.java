@@ -111,6 +111,18 @@ public final class AntiAdPipeline {
     private boolean scanAlways = true;
     private int contextMessages = 5;
 
+    /**
+     * The deployment's own domain, from {@code anti-ad.own-domain}. Joins the
+     * advertising allow list in ChatGuardModule.readConfig, so the address the
+     * server itself advertises on is not treated as advertising.
+     */
+    private String ownDomain = "";
+
+    /** The configured own-domain, or "" when unset. Never null. */
+    public String getOwnDomain() {
+        return this.ownDomain == null ? "" : this.ownDomain;
+    }
+
     private final Map<UUID, Deque<String>> context = new ConcurrentHashMap<>();
 
     /**
@@ -153,6 +165,8 @@ public final class AntiAdPipeline {
         this.scanAlways = "always".equalsIgnoreCase(
                 section.getString("l3.scan-mode", "always"));
         this.contextMessages = Math.max(1, section.getInt("l3.context-messages", 5));
+        String own = section.getString("own-domain", "");
+        this.ownDomain = own == null ? "" : own.toLowerCase(java.util.Locale.ROOT).trim();
         this.wordCache.resize(this.model == null ? 0 : this.model.vocabWords().size(),
                 section.getDouble("l3.word-cache-fraction",
                         NeuralWordCache.DEFAULT_DICT_FRACTION));
