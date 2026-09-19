@@ -9,7 +9,7 @@ The two trees are kept in lockstep: every change is applied to both, modulo
 package/branding renames (`com.coltcore.*` ↔ `com.gildedmc.*`, `coltcore.net` ↔
 `gildedmc.net`). The trained model file is **byte-identical** in both jars.
 
-Version 1.15.0. Java 21, Paper 1.21.4.
+Version 1.16.0. Java 21, Paper 1.21.4.
 
 ---
 
@@ -377,8 +377,8 @@ mvn -f GildedCore-final/pom.xml clean package -DskipTests
 
 Artifacts:
 
-- `ColtCore/target/ColtCore-1.15.0.jar`
-- `GildedCore-final/target/GildedCore-1.15.0.jar`
+- `ColtCore/target/ColtCore-1.16.0.jar`
+- `GildedCore-final/target/GildedCore-1.16.0.jar`
 
 Both jars embed the identical `antiad.m5.bin` (1.83 MB). To confirm the loader
 agrees with the shipped file, run the two commands in §3 — `TldCheck` loads the
