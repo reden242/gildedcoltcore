@@ -1664,7 +1664,7 @@ daily-rewards:
       enabled: true
       commands:
         - 'eco give %player% 50000'
-        - 'crate give %player% amethyst 1'
+        - 'crate give %player% crimson 1'
     day-6:
       day: 6
       enabled: true
@@ -1676,7 +1676,7 @@ daily-rewards:
       enabled: true
       commands:
         - 'eco give %player% 100000'
-        - 'crate give %player% crimson 1'
+        - 'crate give %player% amethyst 1'
 
 # /rewards playtime claims each threshold once. Playtime is the server's own
 # PLAY_ONE_MINUTE statistic (genuine tick time); no external playtime plugin is
@@ -1713,12 +1713,12 @@ playtime-rewards:
       hours: 50
       enabled: true
       commands:
-        - 'crate give %player% amethyst 1'
+        - 'crate give %player% prime 1'
     hundred-hours:
       hours: 100
       enabled: true
       commands:
-        - 'crate give %player% prime 1'
+        - 'crate give %player% amethyst 1'
 
 join-rewards:
   # One-time welcome grant on first join, handled by its own module.
