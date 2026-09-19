@@ -11,80 +11,44 @@ Build: `mvn clean package` → `target/GildedCore-1.12.0.jar`. Java 21, Paper 1.
 
 ### What it is
 
-A purpose-built fastText-style classifier, in-process, CPU only, no sidecar and
-no network hop.
+MillenniumNet — a text-native port of the Millennium 5 recurrent engine,
+in-process, CPU only, no sidecar and no network hop.
 
 ```
-hashed n-grams → embedding[65536][32] → mean pool → ReLU(64) → softmax(7)
+token vector (word row + mean hashed char-4-gram rows, FNV-1a over UTF-8)
+  → stacked Bi-LSTM → attention pooling → LayerNorm → sigmoid p(advertising)
 ```
+
+One timestep per word, no padding, no mask. Binary output: the model answers
+one question, "is this text an advert?", and nothing else.
 
 | | |
 |---|---|
-| parameters | **2,099,719** |
-| disk (int8 quantised) | **2.00 MB** |
-| heap (float32) | **8.0 MB** |
-| labels | `clean, advertising, harassment, death-threat, doxxing, spam-incite, nsfw` |
-| training corpus | **2,540 examples** |
-| held-out accuracy | **96.9%** |
+| parameters | **473,905** |
+| disk | **1,888,831 bytes (~1.80 MB)** |
+| labels | `clean, advertising` — **only these two** |
+| training corpus | **61,098 rows** (`seed_corpus.v2.tsv` 15,274 + 15,274, `tld_corpus.v2.tsv` 15,275 + 15,275) |
+| held-out (`TrainMillennium eval`) | **P 0.9995, R 1.0000, cleanFP 0.0003** |
 
-### Per label, on a held-out slice
+An older revision of this file described a 7-label fastText-style model
+(`clean, advertising, harassment, death-threat, doxxing, spam-incite, nsfw`,
+2,099,719 parameters, 2,540 examples). That model no longer exists: the
+multi-label classifier was replaced by this binary advertising detector,
+and the other categories moved to the deterministic term and pattern layers
+(`PatternPack`, term lists), which is where they are enforced today. Any
+per-label precision/recall table for those categories below is legacy text.
 
-| label | precision | recall | n |
-|---|---:|---:|---:|
-| clean | 93.3% | 97.9% | 142 |
-| advertising | 99.1% | 100.0% | 107 |
-| harassment | 100.0% | 92.3% | 65 |
-| death-threat | 95.7% | 100.0% | 66 |
-| doxxing | 95.5% | 100.0% | 42 |
-| spam-incite | 100.0% | 93.5% | 31 |
-| nsfw | 100.0% | 89.1% | 55 |
+### Decision thresholds
 
-Recall is weakest on **nsfw (89.1%)** and **harassment (92.3%)** — those two are
-the smallest classes, and that is the whole reason.
+| band | meaning |
+|---|---|
+| `p >= 0.85` | block (with address evidence alongside) |
+| `p < 0.40` | clear (an exact L1 address hit still blocks) |
+| in between | ambiguous — Layer 3 reads the message against recent context |
 
-### Why it is 2 MB and not 55 MB
-
-Asked to scale it up. Measured instead, across five random splits each:
-
-| geometry | size | mean | worst |
-|---|---:|---:|---:|
-| **2^16 × 32 × 64** | **2 MB** | **96.5%** | **95.5%** |
-| 2^18 × 64 × 128 | 16 MB | 95.9% | 93.9% |
-| 2^19 × 96 × 192 | 48 MB | 93.7% | 87.6% |
-| 2^20 × 128 × 256 | 128 MB | 92.8% | 90.9% |
-
-**Bigger is worse, and less stable.** Capacity with too little data to constrain
-it memorises the majority classes; the spread across splits widens as it grows.
-A single split once showed 2^19 at 97.6%, which is exactly why five splits get
-run instead of one — that was noise.
-
-This is not permanent. Capacity is limited by corpus size, and the corpus grows
-every time an admin reviews a punishment. Re-run the sweep when it is several
-times larger. The geometry is a config setting, not a constant:
-
-```yaml
-local-ai:
-  model:
-    buckets: 65536    # must be a power of two
-    dim: 32
-    hidden: 64
-```
-
-Set it to whatever you like — but measure before you trust it.
-
-### What growing the corpus actually bought
-
-The same sweep before and after expanding the corpus:
-
-| | 715 examples | 2,540 examples |
-|---|---:|---:|
-| 2 MB model | 91.6% | **96.5%** |
-| 16 MB model | 89.5% | 95.9% |
-| 128 MB model | 87.4% | 92.8% |
-
-Five points of accuracy from data, zero from parameters. The tail classes had
-been 14–21 examples against 356 clean; each is now a frame crossed with a slot,
-so the model learns the grammar of the offence rather than specific sentences.
+Retrain with `antiad/TrainMillennium.java`; the frozen acceptance corpus is
+`antiad/acceptance_in.txt` with expected forms+scores in
+`antiad/af_baseline.txt`.
 
 ---
 
