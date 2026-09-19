@@ -61,7 +61,6 @@ import com.coltcore.core.modules.StashModule;
 import com.coltcore.core.modules.RedeemCodeModule;
 import com.coltcore.core.modules.AntibotGuard;
 import com.coltcore.core.modules.JoinRewardModule;
-import com.coltcore.core.modules.SusModule;
 import com.coltcore.core.modules.EntityLimitModule;
 import com.coltcore.core.modules.RewardsModule;
 import com.coltcore.core.modules.DeepslateDecoyModule;
@@ -228,7 +227,6 @@ implements Listener {
     private RewardsModule rewardsModule;
     private AntibotGuard antibotGuard;
     private JoinRewardModule joinRewardModule;
-    private SusModule susModule;
     private EntityLimitModule entityLimitModule;
     private ConsoleGuard consoleGuard;
     private JoinPacketIsolation joinPacketIsolation;
@@ -312,11 +310,6 @@ implements Listener {
         this.joinRewardModule = new JoinRewardModule(this);
         this.joinRewardModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.joinRewardModule, (Plugin)this);
-        // Sus addon: consolidated anticheat flag log (Kratos API + console
-        // scraping for MLSAC, BaritoneRemover, Grounded, GrimAC, AngleGuard).
-        this.susModule = new SusModule(this);
-        this.susModule.enable();
-        Bukkit.getPluginManager().registerEvents((Listener)this.susModule, (Plugin)this);
         this.rewardsGui = new RewardsGui(this.rewardsModule);
         this.rewardsGui.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.rewardsGui, (Plugin)this);
@@ -359,14 +352,6 @@ implements Listener {
             return true;
         }
         return this.rewardsModule.command(sender, args);
-    }
-
-    /** /sus + /suspicious: consolidated anticheat flag log. */
-    private boolean openSus(CommandSender sender) {
-        if (!(sender instanceof Player viewer)) return true;
-        if (this.susModule == null) return true;
-        this.susModule.openGui(viewer);
-        return true;
     }
 
     /** Points a command declared in plugin.yml back at this plugin's onCommand. */
@@ -442,7 +427,6 @@ implements Listener {
         if (this.rewardsModule != null) this.rewardsModule.disable();
         if (this.antibotGuard != null) this.antibotGuard.disable();
         if (this.joinRewardModule != null) this.joinRewardModule.disable();
-        if (this.susModule != null) this.susModule.disable();
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
         if (this.consoleGuard != null) this.consoleGuard.disable();
         if (this.antiAdPipeline != null) this.antiAdPipeline.disable();
@@ -477,7 +461,6 @@ implements Listener {
             case "playerwipe" -> this.playerWipeModule.command(sender, args);
             case "review" -> this.reviewModule.command(sender, args);
             case "flagreview" -> openFlagReview(sender);
-            case "sus", "suspicious" -> openSus(sender);
             case "rewards", "dailyrewards", "playtimerewards" -> openRewards(sender, args);
             case "redeem" -> this.redeemModule.redeem(sender, args);
             case "redeemcode" -> this.redeemModule.admin(sender, args);
@@ -533,8 +516,6 @@ implements Listener {
             Map.entry("playerwipe",       "coltcore.playerwipe"),
             Map.entry("review",           "coltcore.review"),
             Map.entry("flagreview",       "coltcore.flagreview"),
-            Map.entry("sus",              "coltcore.sus"),
-            Map.entry("suspicious",       "coltcore.sus"),
             Map.entry("redeemcode",       "coltcore.redeemcode"),
             Map.entry("rewards",          "coltcore.rewards"),
             Map.entry("dailyrewards",     "coltcore.rewards"),

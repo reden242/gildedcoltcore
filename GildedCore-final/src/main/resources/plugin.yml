@@ -129,11 +129,6 @@ commands:
     description: Redeem a one-time code. One redemption per IP.
     usage: /redeem <code>
     permission: gildedcore.redeem
-  sus:
-    description: Consolidated anticheat flag log (Kratos, GrimAC, AngleGuard, MLSAC, BaritoneRemover, Grounded).
-    usage: /sus
-    aliases: [suspicious]
-    permission: gildedcore.sus
   redeemcode:
     description: Manage one-time-per-IP redeem codes.
     usage: /redeemcode [create|delete|uses|reset|reload]
@@ -271,10 +266,4 @@ permissions:
     default: op
   gildedcore.flagreview:
     description: Open the advertising flag queue. Executive and above.
-    default: op
-  gildedcore.sus:
-    description: View the consolidated anticheat flag log.
-    default: op
-  gildedcore.sus.alerts:
-    description: Receive anticheat flag alerts.
     default: op

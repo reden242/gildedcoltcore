@@ -70,7 +70,6 @@ import com.gildedmc.core.modules.EntityLimitModule;
 import com.gildedmc.core.modules.RewardsModule;
 import com.gildedmc.core.modules.AntibotGuard;
 import com.gildedmc.core.modules.JoinRewardModule;
-import com.gildedmc.core.modules.SusModule;
 import com.gildedmc.core.modules.RewardsGui;
 import com.gildedmc.core.modules.ReviewModule;
 import com.gildedmc.core.modules.ConsoleGuard;
@@ -228,7 +227,6 @@ implements Listener {
     private AntibotGuard antibotGuard;
     private RewardsGui rewardsGui;
     private JoinRewardModule joinRewardModule;
-    private SusModule susModule;
     private EntityLimitModule entityLimitModule;
     private ConsoleGuard consoleGuard;
     private JoinPacketIsolation joinPacketIsolation;
@@ -322,11 +320,6 @@ implements Listener {
         this.joinRewardModule = new JoinRewardModule(this);
         this.joinRewardModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.joinRewardModule, (Plugin)this);
-        // Sus addon: consolidated anticheat flag log (Kratos API + console
-        // scraping for MLSAC, BaritoneRemover, Grounded, GrimAC, AngleGuard).
-        this.susModule = new SusModule(this);
-        this.susModule.enable();
-        Bukkit.getPluginManager().registerEvents((Listener)this.susModule, (Plugin)this);
         // Chunk entity cap, minecart refund and machine-launch refusal. Silent
         // to players by design; staff alerts go to the console.
         this.entityLimitModule = new EntityLimitModule(this);
@@ -345,14 +338,6 @@ implements Listener {
         if (!(sender instanceof Player viewer)) return true;
         if (this.reviewGui == null) return true;
         this.reviewGui.openGui(viewer);
-        return true;
-    }
-
-    /** /sus + /suspicious: consolidated anticheat flag log. */
-    private boolean openSus(CommandSender sender) {
-        if (!(sender instanceof Player viewer)) return true;
-        if (this.susModule == null) return true;
-        this.susModule.openGui(viewer);
         return true;
     }
 
@@ -437,7 +422,6 @@ implements Listener {
         if (this.antibotGuard != null) this.antibotGuard.disable();
         if (this.rewardsGui != null) this.rewardsGui.disable();
         if (this.joinRewardModule != null) this.joinRewardModule.disable();
-        if (this.susModule != null) this.susModule.disable();
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
         if (this.consoleGuard != null) this.consoleGuard.disable();
         if (this.antiAdPipeline != null) this.antiAdPipeline.disable();
@@ -476,7 +460,6 @@ implements Listener {
             case "playerwipe" -> this.playerWipeModule.command(sender, args);
             case "review" -> this.reviewModule.command(sender, args);
             case "flagreview" -> openFlagReview(sender);
-            case "sus", "suspicious" -> openSus(sender);
             case "rewards", "dailyrewards", "playtimerewards" -> openRewards(sender, args);
             case "redeem" -> this.redeemModule.redeem(sender, args);
             case "redeemcode" -> this.redeemModule.admin(sender, args);
@@ -532,8 +515,6 @@ implements Listener {
             Map.entry("playerwipe",       "gildedcore.playerwipe"),
             Map.entry("review",           "gildedcore.review"),
             Map.entry("flagreview",       "gildedcore.flagreview"),
-            Map.entry("sus",              "gildedcore.sus"),
-            Map.entry("suspicious",       "gildedcore.sus"),
             Map.entry("redeemcode",       "gildedcore.redeemcode"),
             Map.entry("rewards",          "gildedcore.rewards"),
             Map.entry("dailyrewards",     "gildedcore.rewards"),
