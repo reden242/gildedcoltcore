@@ -1066,11 +1066,15 @@ chat-guard:
     # Leave it empty. Put entries here only to NARROW detection deliberately.
     tlds: []
     # Your own addresses. Telling someone the server IP is not advertising.
+    # Operator-provided mapping: coltcore.dpdns.org, *.coltmc.bond,
+    # *.coltmc.dpdns.org, *.coltmc.gildedmc.pro. Suffix matching covers
+    # play/discord/store subdomains. Nothing else is allowlisted.
     allow:
-      - coltcore.net
+      - coltcore.dpdns.org
       - discord.gg/coltcore
       - coltmc.bond
       - coltmc.dpdns.org
+      - coltmc.gildedmc.pro
     # Skip IPv4 matches shaped like a Minecraft version ("1.21.4.1").
     ignore-version-like: true
 
@@ -1563,7 +1567,7 @@ playtime-rewards:
 # last few lines, which is the only way to catch a pitch spread across several
 # messages. Both fail OPEN: a missing model means messages pass, never punish.
 anti-ad:
-  own-domain: 'coltcore.net'
+  own-domain: 'coltcore.dpdns.org'
   l2:
     enabled: true
     model-resource: '/antiad.m5.bin'

@@ -1049,10 +1049,12 @@ chat-guard:
     # Leave it empty. Put entries here only to NARROW detection deliberately.
     tlds: []
     # Your own addresses. Telling someone the server IP is not advertising.
+    # Operator-provided mapping, EXCLUSIVE: play/store/discord.gildedmc.pro.
+    # Bare gildedmc.pro and gildedmc.net are NOT allowed and will block.
     allow:
-      - gildedmc.net
-      - discord.gg/gildedmc
-      - gildedmc.pro
+      - play.gildedmc.pro
+      - store.gildedmc.pro
+      - discord.gildedmc.pro
     # Skip IPv4 matches shaped like a Minecraft version ("1.21.4.1").
     ignore-version-like: true
 
@@ -1687,7 +1689,7 @@ playtime-rewards:
 # last few lines, which is the only way to catch a pitch spread across several
 # messages. Both fail OPEN: a missing model means messages pass, never punish.
 anti-ad:
-  own-domain: 'gildedmc.net'
+  own-domain: 'play.gildedmc.pro'
   l2:
     enabled: true
     model-resource: '/antiad.m5.bin'
