@@ -59,6 +59,7 @@ import com.coltcore.core.modules.ReviewModule;
 import com.coltcore.core.modules.SignContextTracker;
 import com.coltcore.core.modules.StashModule;
 import com.coltcore.core.modules.RedeemCodeModule;
+import com.coltcore.core.modules.AntibotGuard;
 import com.coltcore.core.modules.JoinRewardModule;
 import com.coltcore.core.modules.EntityLimitModule;
 import com.coltcore.core.modules.RewardsModule;
@@ -224,6 +225,7 @@ implements Listener {
     private ReviewModule reviewModule;
     private RedeemCodeModule redeemModule;
     private RewardsModule rewardsModule;
+    private AntibotGuard antibotGuard;
     private JoinRewardModule joinRewardModule;
     private EntityLimitModule entityLimitModule;
     private ConsoleGuard consoleGuard;
@@ -301,6 +303,10 @@ implements Listener {
         this.redeemModule.setCreatorGate(this::isManagerPlus);
         this.rewardsModule = new RewardsModule(this);
         this.rewardsModule.enable();
+        this.antibotGuard = new AntibotGuard(this);
+        this.antibotGuard.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.antibotGuard, (Plugin)this);
+        this.rewardsModule.setAntibot(this.antibotGuard);
         this.joinRewardModule = new JoinRewardModule(this);
         this.joinRewardModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.joinRewardModule, (Plugin)this);
@@ -419,6 +425,7 @@ implements Listener {
         if (this.reviewModule != null) this.reviewModule.disable();
         if (this.diagnosticsModule != null) this.diagnosticsModule.disable();
         if (this.rewardsModule != null) this.rewardsModule.disable();
+        if (this.antibotGuard != null) this.antibotGuard.disable();
         if (this.joinRewardModule != null) this.joinRewardModule.disable();
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
         if (this.consoleGuard != null) this.consoleGuard.disable();
@@ -1836,7 +1843,7 @@ implements Listener {
         }
         if (name.equals("rewards") || name.equals("dailyrewards") || name.equals("playtimerewards")) {
             return args.length == 1
-                    ? this.complete(args, List.of("daily", "playtime", "claimall", "status", "reload"))
+                    ? this.complete(args, List.of("daily", "playtime", "claimall", "status", "reload", "ban", "pardon"))
                     : Collections.emptyList();
         }
         if (name.equals("rankgive")) {

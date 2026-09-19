@@ -68,6 +68,7 @@ import com.gildedmc.core.modules.ReviewGui;
 import com.gildedmc.core.modules.RedeemCodeModule;
 import com.gildedmc.core.modules.EntityLimitModule;
 import com.gildedmc.core.modules.RewardsModule;
+import com.gildedmc.core.modules.AntibotGuard;
 import com.gildedmc.core.modules.JoinRewardModule;
 import com.gildedmc.core.modules.RewardsGui;
 import com.gildedmc.core.modules.ReviewModule;
@@ -223,6 +224,7 @@ implements Listener {
     private ReviewModule reviewModule;
     private RedeemCodeModule redeemModule;
     private RewardsModule rewardsModule;
+    private AntibotGuard antibotGuard;
     private RewardsGui rewardsGui;
     private JoinRewardModule joinRewardModule;
     private EntityLimitModule entityLimitModule;
@@ -308,6 +310,10 @@ implements Listener {
         this.redeemModule.setCreatorGate(this::isManagerPlus);
         this.rewardsModule = new RewardsModule(this);
         this.rewardsModule.enable();
+        this.antibotGuard = new AntibotGuard(this);
+        this.antibotGuard.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.antibotGuard, (Plugin)this);
+        this.rewardsModule.setAntibot(this.antibotGuard);
         this.rewardsGui = new RewardsGui(this.rewardsModule);
         this.rewardsGui.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.rewardsGui, (Plugin)this);
@@ -413,6 +419,7 @@ implements Listener {
         if (this.diagnosticsModule != null) this.diagnosticsModule.disable();
         if (this.reviewModule != null) this.reviewModule.disable();
         if (this.rewardsModule != null) this.rewardsModule.disable();
+        if (this.antibotGuard != null) this.antibotGuard.disable();
         if (this.rewardsGui != null) this.rewardsGui.disable();
         if (this.joinRewardModule != null) this.joinRewardModule.disable();
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
@@ -1830,7 +1837,7 @@ implements Listener {
             return Collections.emptyList();
         }
         if (name.equals("rewards") || name.equals("dailyrewards") || name.equals("playtimerewards")) {
-            return args.length == 1 ? this.complete(args, List.of("daily", "playtime", "claimall", "status", "reload")) : Collections.emptyList();
+            return args.length == 1 ? this.complete(args, List.of("daily", "playtime", "claimall", "status", "reload", "ban", "pardon")) : Collections.emptyList();
         }
         if (name.equals("redeem")) {
             return Collections.emptyList();

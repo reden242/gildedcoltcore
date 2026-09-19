@@ -1868,6 +1868,15 @@ join-rewards:
   commands:
     - 'eco give %player% 10000'
 
+anti-bot:
+  # Minutes of genuinely active play required before any reward claim.
+  # Accrued once a minute while moving, interacting, breaking or placing
+  # blocks, chatting or running commands. Idling earns nothing.
+  active-minutes-required: 30
+  # Distinct accounts claiming from one IP inside 24h before the IP and
+  # every account on it are banned from rewards forever.
+  max-accounts-per-ip: 3
+
 # Each reward command is run by console. Available placeholders:
 # %player%, %uuid%, %reward%, %streak% and %hours%.
 

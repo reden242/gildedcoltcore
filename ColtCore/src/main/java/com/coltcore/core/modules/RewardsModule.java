@@ -36,6 +36,8 @@ public final class RewardsModule {
     private final JavaPlugin plugin;
     private File dataFile;
     private FileConfiguration data;
+    /** Anti-botting gate; null until the plugin wires it. */
+    private AntibotGuard antibot;
 
     public RewardsModule(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -51,6 +53,24 @@ public final class RewardsModule {
 
     public void reload() {
         load();
+        if (this.antibot != null) {
+            try {
+                this.antibot.reload();
+            } catch (Throwable ignored) { }
+        }
+    }
+
+    /** Wires the anti-botting gate from the main class. */
+    public void setAntibot(AntibotGuard guard) { this.antibot = guard; }
+
+    /** Denial message when the player may not claim, or null. */
+    private String antibotDeny(Player player) {
+        if (this.antibot == null) return null;
+        try {
+            return this.antibot.denyReason(player);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private void load() {
@@ -85,18 +105,42 @@ public final class RewardsModule {
         String action = args.length == 0 ? "status" : args[0].toLowerCase(Locale.ROOT);
         return switch (action) {
             case "daily" -> {
-                claimDaily(player, true);
+                String denied = antibotDeny(player);
+                if (denied != null) {
+                    player.sendMessage(UiKit.colour(denied));
+                    yield true;
+                }
+                int claimed = claimDaily(player, true);
+                if (claimed > 0 && this.antibot != null) this.antibot.recordClaim(player);
                 yield true;
             }
             case "playtime", "time" -> {
-                claimPlaytime(player, true);
+                String denied = antibotDeny(player);
+                if (denied != null) {
+                    player.sendMessage(UiKit.colour(denied));
+                    yield true;
+                }
+                int claimed = claimPlaytime(player, true);
+                if (claimed > 0 && this.antibot != null) this.antibot.recordClaim(player);
                 yield true;
             }
             case "claimall", "all" -> {
+                String denied = antibotDeny(player);
+                if (denied != null) {
+                    player.sendMessage(UiKit.colour(denied));
+                    yield true;
+                }
                 int total = claimDaily(player, false) + claimPlaytime(player, false);
                 if (total == 0) player.sendMessage(ChatColor.YELLOW + "You have no rewards ready to claim.");
                 else player.sendMessage(ChatColor.GREEN + "Claimed " + total + " reward" + (total == 1 ? "" : "s") + ".");
+                if (total > 0 && this.antibot != null) this.antibot.recordClaim(player);
                 yield true;
+            }
+            case "ban" -> {
+                yield antibotBan(sender, args);
+            }
+            case "pardon", "unban" -> {
+                yield antibotPardon(sender, args);
             }
             case "status", "help" -> {
                 status(player);
@@ -107,6 +151,48 @@ public final class RewardsModule {
                 yield true;
             }
         };
+    }
+
+    private boolean antibotBan(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(PERM_ADMIN) && !sender.isOp()) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission to ban from rewards. (" + PERM_ADMIN + ")");
+            return true;
+        }
+        if (this.antibot == null) {
+            sender.sendMessage(ChatColor.RED + "Anti-botting is not wired up.");
+            return true;
+        }
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.YELLOW + "/rewards ban <player> - bans the account and its IP forever.");
+            return true;
+        }
+        Player target = Bukkit.getPlayerExact(args[1]);
+        java.util.UUID id = target != null ? target.getUniqueId() : Bukkit.getOfflinePlayer(args[1]).getUniqueId();
+        boolean uuidNew = this.antibot.banUuid(id);
+        boolean ipNew = target != null && this.antibot.banIp(AntibotGuard.ipOf(target));
+        sender.sendMessage(UiKit.colour("&cBanned &f" + args[1] + " &cfrom rewards forever"
+                + (uuidNew ? "" : " &8(already banned)")
+                + (target != null ? (ipNew ? " &7+ IP &f" + AntibotGuard.ipOf(target) : " &8(IP already banned)") : "")));
+        return true;
+    }
+
+    private boolean antibotPardon(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(PERM_ADMIN) && !sender.isOp()) {
+            sender.sendMessage(ChatColor.RED + "You do not have permission to pardon rewards bans. (" + PERM_ADMIN + ")");
+            return true;
+        }
+        if (this.antibot == null) {
+            sender.sendMessage(ChatColor.RED + "Anti-botting is not wired up.");
+            return true;
+        }
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.YELLOW + "/rewards pardon <player|uuid|ip> - lifts a rewards ban.");
+            return true;
+        }
+        String lifted = this.antibot.pardon(args[1]);
+        if (lifted == null) sender.sendMessage(ChatColor.YELLOW + "No rewards ban found for '" + args[1] + "'.");
+        else sender.sendMessage(UiKit.colour("&aLifted rewards ban: &f" + lifted + "&a."));
+        return true;
     }
 
     private int claimDaily(Player player, boolean tell) {
