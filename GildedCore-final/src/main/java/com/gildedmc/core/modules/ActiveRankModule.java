@@ -75,6 +75,7 @@ public final class ActiveRankModule implements Listener {
     private FileConfiguration data;
     private final Set<String> granted = new LinkedHashSet<>();
     private SchedulerCompat.ManagedTask task;
+    private java.util.function.ToDoubleFunction<Player> hoursSource;
 
     public ActiveRankModule(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -161,6 +162,7 @@ public final class ActiveRankModule implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         if (!this.enabled) return;
         SchedulerCompat.runLater(this.plugin, () -> {
             if (event.getPlayer().isOnline()) check(event.getPlayer(), false);
@@ -174,11 +176,36 @@ public final class ActiveRankModule implements Listener {
 
     /** Hours this account has been on the server, from the server's own counter. */
     public double hours(Player p) {
+        // Prefer the tracked playtime the rewards module already maintains.
+        // Statistic.PLAY_ONE_MINUTE is server-owned and was rejected elsewhere in
+        // this codebase precisely because it does not reflect real playtime, so
+        // reading it here meant the threshold was never reached and the rank was
+        // never granted. Falls back to the statistic only when no source is
+        // wired, so the module still works standalone.
+        if (this.hoursSource != null) {
+            try {
+                double tracked = this.hoursSource.applyAsDouble(p);
+                if (tracked > 0.0D) return tracked;
+            } catch (Throwable ignored) {
+                // Fall through to the statistic.
+            }
+        }
         try {
             return p.getStatistic(Statistic.PLAY_ONE_MINUTE) / (double) TICKS_PER_HOUR;
         } catch (Exception ex) {
             return 0.0D;
         }
+    }
+
+    /**
+     * Supplies the authoritative playtime in hours.
+     *
+     * <p>Wired from the host to the rewards module's tracked total, which is the
+     * same number the rewards GUI shows, so a player reading "8h" in one menu and
+     * failing the threshold in another is not possible.
+     */
+    public void playtimeSource(java.util.function.ToDoubleFunction<Player> source) {
+        this.hoursSource = source;
     }
 
     /**
@@ -322,14 +349,14 @@ public final class ActiveRankModule implements Listener {
         boolean has = this.granted.contains(of.getUniqueId().toString());
         int pct = (int) Math.min(100.0D, (h / this.requiredHours) * 100.0D);
         String bar = buildBar(pct);
-        Inventory inv = UiKit.chest(3, "&#EEBB01&lACTIVE RANK");
+        Inventory inv = UiKit.themed(3, "ACTIVE RANK");
         UiKit.fillWithPanes(inv, Material.GRAY_STAINED_GLASS_PANE);
         List<String> lore = new ArrayList<>();
         lore.add("&7Playtime needed: &f" + this.requiredHours + "h");
         lore.add("&7Your playtime: &f" + String.format(Locale.ROOT, "%.1f", h) + "h &8(&e" + pct + "%&8)");
         lore.add("&7Progress: " + bar);
         lore.add(" ");
-        lore.add("&7Reward: &#EEBB01" + this.rank + " &7rank");
+        lore.add("&7Reward: &a" + this.rank + " &7rank");
         lore.add(has ? "&aAlready granted!" : "&eKeep playing to unlock!");
         ItemStack head = UiKit.head(of, "&#EEBB01&lACTIVE RANK", lore);
         inv.setItem(13, head);
@@ -354,6 +381,9 @@ public final class ActiveRankModule implements Listener {
         String stripped = ChatColor.stripColor(UiKit.colour(title));
         if (!stripped.contains("ACTIVE RANK")) return;
         e.setCancelled(true);
+        if (e.getCurrentItem() == null) return;
+        // Close on any click
+        // p.closeInventory();
     }
 
     private static String colour(String s) {

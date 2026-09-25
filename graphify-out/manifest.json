@@ -1,0 +1,1064 @@
+{
+  "ColtCore/pom.xml": {
+    "mtime": 1789816376.34984,
+    "seen": 1790327484.8041558,
+    "ast_hash": "2eae1cc1d4489dd1e2f88982c0e95a3e",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/ColtCorePlugin.java": {
+    "mtime": 1790368229.092417,
+    "seen": 1790368444.532925,
+    "ast_hash": "d8c5c79295064e6b9d52b21bf3f3bc24",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/ConfigUpdater.java": {
+    "mtime": 1789700104.812942,
+    "seen": 1789700605.341095,
+    "ast_hash": "a5da4d26bc44c18769ea422a9ea94960",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/SchedulerCompat.java": {
+    "mtime": 1790314764.5944884,
+    "seen": 1790327484.8041735,
+    "ast_hash": "5dff432a56d7996fd18c595ed193f4cb",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/ActiveRankModule.java": {
+    "mtime": 1790346056.6517787,
+    "seen": 1790347021.1802812,
+    "ast_hash": "4f4dd9d0990d001971c24faaf31f2680",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/AdvertContext.java": {
+    "mtime": 1787214837.612772,
+    "seen": 1789700605.3410978,
+    "ast_hash": "f0ea7a7bbad643e1ca37ef3acff20158",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/AntiAdPipeline.java": {
+    "mtime": 1789786208.2404523,
+    "seen": 1790327484.8041792,
+    "ast_hash": "e1900dd959722488ff32f79c1e149d56",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/BroadcastCompat.java": {
+    "mtime": 1787214837.648385,
+    "seen": 1789700605.3411002,
+    "ast_hash": "4a8ae1c9f1a40b8ca4668caa02800b9b",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/ChatGuardModule.java": {
+    "mtime": 1789790489.2494822,
+    "seen": 1790327484.8041904,
+    "ast_hash": "d6d5ec9fa01ec8eabf5bab479a9c3503",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/ChatLimiterModule.java": {
+    "mtime": 1789701934.9516082,
+    "seen": 1790327484.804192,
+    "ast_hash": "5c3fef39413c11d9f882a4361db55ba8",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/ConsoleGuard.java": {
+    "mtime": 1789789976.222623,
+    "seen": 1790327484.8041954,
+    "ast_hash": "1c2177f273d82f13744d881276888525",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/CreativeGuardModule.java": {
+    "mtime": 1789752134.0513852,
+    "seen": 1790327484.8041995,
+    "ast_hash": "c6f65e50739283ae297f7315e75344df",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/DeepslateDecoyModule.java": {
+    "mtime": 1787286257.7485528,
+    "seen": 1789700605.341105,
+    "ast_hash": "96b75aa91781a19a93c4586bdc4a88a7",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/DiagnosticsModule.java": {
+    "mtime": 1790368229.1194606,
+    "seen": 1790368444.5329447,
+    "ast_hash": "60284eed83e3dd1bfe73da3cb903b69f",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/DiscordBridge.java": {
+    "mtime": 1789413142.802979,
+    "seen": 1789700605.3411064,
+    "ast_hash": "1babf6f5f248b4159f527ac187e086ba",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/DupeIpParser.java": {
+    "mtime": 1787297291.499156,
+    "seen": 1789700605.3411071,
+    "ast_hash": "8f579c2333a0a347a371f7594e4c1e60",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/EntityLimitModule.java": {
+    "mtime": 1789413603.028906,
+    "seen": 1789700605.3411083,
+    "ast_hash": "296afb9fe56fd518fbc409bee6c015df",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/HandWritten.java": {
+    "mtime": 1787606764.056949,
+    "seen": 1789700605.3411095,
+    "ast_hash": "8cddeb9a15e55b81cf8645ceb613e597",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/IntegratedCoreModuleX.java": {
+    "mtime": 1790354534.8231049,
+    "seen": 1790354764.4983435,
+    "ast_hash": "30f2ec2c5a8b2640b69241d121da08b3",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/JoinPacketIsolation.java": {
+    "mtime": 1789699646.0900984,
+    "seen": 1789700605.3411117,
+    "ast_hash": "27f96df5ff9fc3fd8799bd3df30737fe",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/KelpGrowthModule.java": {
+    "mtime": 1789520991.6827004,
+    "seen": 1789700605.3411124,
+    "ast_hash": "27bf14d5cc9f6314e1e74a1f03fd036b",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/Lexicon.java": {
+    "mtime": 1787572072.2313354,
+    "seen": 1789700605.341113,
+    "ast_hash": "08aed8593bd0867e875f9448c1b5ba84",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/LinearModel.java": {
+    "mtime": 1789701934.951109,
+    "seen": 1790327484.8042233,
+    "ast_hash": "e41fa4b01caf53e0b01cafdbd3bf063b",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/LocalAiModule.java": {
+    "mtime": 1789701934.951109,
+    "seen": 1790327484.8042257,
+    "ast_hash": "86ff85eaeaf0f143f1fc1a1f09350b28",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/LocalContextAggregator.java": {
+    "mtime": 1789411645.1635904,
+    "seen": 1789700605.3411155,
+    "ast_hash": "25a8cd4284798ec4f7c1048d3ecfc115",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/LogicCenter.java": {
+    "mtime": 1787608466.8237991,
+    "seen": 1789700605.3411162,
+    "ast_hash": "e404d5077ea789f9e5756021831b1c5a",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/MaintenanceModule.java": {
+    "mtime": 1787308499.2630453,
+    "seen": 1789700605.341117,
+    "ast_hash": "5370f4cdaf3d2100dd1a77dba4aa12e7",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/MillenniumNet.java": {
+    "mtime": 1789703171.8286593,
+    "seen": 1790327484.8042326,
+    "ast_hash": "3b207b7b6b2d71b8e061b4e65f1e63b6",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/Mutations.java": {
+    "mtime": 1787287321.2076037,
+    "seen": 1789700605.3411186,
+    "ast_hash": "db98fb72ed0c85b1782b51b0fa5a84a6",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/MuteStore.java": {
+    "mtime": 1789701934.9506083,
+    "seen": 1790327484.804237,
+    "ast_hash": "9cfcae71f58b93851dc6bff11425da18",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/NeuralModel.java": {
+    "mtime": 1789786533.2207208,
+    "seen": 1790327484.804238,
+    "ast_hash": "f50c9e1f78d8bb824ad2aa75e365d02f",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/PatternPack.java": {
+    "mtime": 1787217191.8659022,
+    "seen": 1789700605.3411205,
+    "ast_hash": "eded41bb763a88547858327f6bc23554",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/Phonetics.java": {
+    "mtime": 1787214838.0023568,
+    "seen": 1789700605.3411212,
+    "ast_hash": "53e18036aad6ed814b9f34e3704d736d",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/PlayerWipeModule.java": {
+    "mtime": 1790355039.2723489,
+    "seen": 1790355113.3386197,
+    "ast_hash": "c409c8702c7a6c54ada68760cb14021b",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/PunishmentBridge.java": {
+    "mtime": 1789751955.2155275,
+    "seen": 1790327484.8042445,
+    "ast_hash": "11f8fbc52fb179f433fb83688a981cd2",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/RedeemCodeModule.java": {
+    "mtime": 1789751889.2839754,
+    "seen": 1790327484.8042476,
+    "ast_hash": "e5cbe44efb3d0cddb2493f05d43ada71",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/RedstoneThrottle.java": {
+    "mtime": 1789413603.1508307,
+    "seen": 1789700605.3411245,
+    "ast_hash": "b688a31db26086d927c3cb4248d9bdc3",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/RedstoneUnstaler.java": {
+    "mtime": 1789413603.1775675,
+    "seen": 1789700605.341125,
+    "ast_hash": "c1d894deab41e4b849bfa331de27e2d3",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/ReviewModule.java": {
+    "mtime": 1789789757.3148677,
+    "seen": 1790327484.804256,
+    "ast_hash": "03a8ef51af2869f03167d5fa6b6ef270",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/RewardsModule.java": {
+    "mtime": 1790364869.9978907,
+    "seen": 1790368444.5329766,
+    "ast_hash": "993c9aef9666ede9894ebe48a24c914d",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/Scripts.java": {
+    "mtime": 1789705166.923881,
+    "seen": 1790327484.8042595,
+    "ast_hash": "c80f9246d6f4db68c3ef4bcd369c7bbf",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/SeedCorpus.java": {
+    "mtime": 1789411827.9839883,
+    "seen": 1789700605.3411286,
+    "ast_hash": "e95c6bfc66e728ab5bfc54d667c32c27",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/StaffMonitorModule.java": {
+    "mtime": 1790355039.2738492,
+    "seen": 1790355113.3386319,
+    "ast_hash": "359ba0536db7b6278c71af07e763763d",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/StashModule.java": {
+    "mtime": 1789813997.2542942,
+    "seen": 1790327484.804267,
+    "ast_hash": "9de75647f6b14532cc6fa4002990dac7",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/TextFeatures.java": {
+    "mtime": 1787284942.210117,
+    "seen": 1789700605.3411317,
+    "ast_hash": "849bbe5f77a585e43ddf1fb013b10510",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/Tlds.java": {
+    "mtime": 1787214838.155278,
+    "seen": 1789700605.3411326,
+    "ast_hash": "e7b836a7675f9f65c8f608b618743238",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/UiKit.java": {
+    "mtime": 1790354681.3491387,
+    "seen": 1790354764.498378,
+    "ast_hash": "7d3d1ee19012a5fbb03b0eb81b145921",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/VanishSupport.java": {
+    "mtime": 1790328541.5686605,
+    "seen": 1790328611.5431614,
+    "ast_hash": "50ed570de18df5b5481afd8f687b1982",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/pom.xml": {
+    "mtime": 1789816376.34984,
+    "seen": 1790327484.8042767,
+    "ast_hash": "f94bbf9fb16dc7398ecc1025440af5e6",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/ConfigUpdater.java": {
+    "mtime": 1789700193.186748,
+    "seen": 1789700605.3411353,
+    "ast_hash": "7089c02c34c8df5dad164e5c76220946",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/GildedCorePlugin.java": {
+    "mtime": 1790368252.734177,
+    "seen": 1790368444.5329902,
+    "ast_hash": "f512d965898ef3fb0e6e1d8fe5cdeae6",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/SchedulerCompat.java": {
+    "mtime": 1790314782.5758815,
+    "seen": 1790327484.8042839,
+    "ast_hash": "c2a246de9ae1cbb39f259fc96df24fb5",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/ActiveRankModule.java": {
+    "mtime": 1790354911.6486702,
+    "seen": 1790355113.3386428,
+    "ast_hash": "5a8d93780c6d489fac6e71d15c43e537",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/AdvertContext.java": {
+    "mtime": 1786589431.4115913,
+    "seen": 1789700605.3411381,
+    "ast_hash": "2fa1571c22df7ae9f093323574f11799",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/AntiAdPipeline.java": {
+    "mtime": 1789786238.247471,
+    "seen": 1790327484.8042886,
+    "ast_hash": "accc8ed1183cb62143eea8bdc6a6d16f",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/BroadcastCompat.java": {
+    "mtime": 1784664392.0,
+    "seen": 1789700605.3411405,
+    "ast_hash": "73fcb52986ca3cdc30807320ca9a3321",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/ChatGuardModule.java": {
+    "mtime": 1789790668.2611444,
+    "seen": 1790327484.8042958,
+    "ast_hash": "fbe8c26bdcff02b9b39840bb240ee5fa",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/ChatLimiterModule.java": {
+    "mtime": 1789701934.9491086,
+    "seen": 1790327484.804297,
+    "ast_hash": "d0d56899823c16c9d36a7d5249030765",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/ConsoleGuard.java": {
+    "mtime": 1789790269.2208977,
+    "seen": 1790327484.8043005,
+    "ast_hash": "88b214d3ed7614a590837d1d573b66ad",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/CreativeGuardModule.java": {
+    "mtime": 1789752158.3237627,
+    "seen": 1790327484.8043034,
+    "ast_hash": "988b3682deb66a6cd71b1c34b27d7ec1",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/DeepslateDecoyModule.java": {
+    "mtime": 1787286257.7495558,
+    "seen": 1789700605.341145,
+    "ast_hash": "2234b95a397150194f73a626f5b1a4c5",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/DiagnosticsModule.java": {
+    "mtime": 1790368229.0974166,
+    "seen": 1790368444.533005,
+    "ast_hash": "2349a583b05500ebc724defa0f2cfa68",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/DiscordBridge.java": {
+    "mtime": 1789413152.9603665,
+    "seen": 1789700605.3411465,
+    "ast_hash": "fd33788a781be6dfa1cf9f1800e13efd",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/DupeIpParser.java": {
+    "mtime": 1786309240.0,
+    "seen": 1789700605.3411472,
+    "ast_hash": "472865442556643c0b8d40d8e77c8070",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/EntityLimitModule.java": {
+    "mtime": 1789413603.3644722,
+    "seen": 1789700605.341148,
+    "ast_hash": "3de60c3d1b311f46cfd9024939ad8ec9",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/HandWritten.java": {
+    "mtime": 1787606708.9727612,
+    "seen": 1789700605.3411493,
+    "ast_hash": "aab2b126e82c7d0ed1ec2e57f9197e31",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/IntegratedCoreModuleX.java": {
+    "mtime": 1790354534.8221054,
+    "seen": 1790354764.498403,
+    "ast_hash": "5b9eb1b17c4042f6bbe954d786c0054b",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/JoinPacketIsolation.java": {
+    "mtime": 1789699651.8690665,
+    "seen": 1789700605.341151,
+    "ast_hash": "40ca55c4dd44432e5d7769c0b9b51720",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/KelpGrowthModule.java": {
+    "mtime": 1789521212.4089313,
+    "seen": 1789700605.3411517,
+    "ast_hash": "64c54a7873a235da53831088be4651f1",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/Lexicon.java": {
+    "mtime": 1787571801.2196264,
+    "seen": 1789700605.3411524,
+    "ast_hash": "e1810a56879d1ee077c5c57a287f02c5",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/LinearModel.java": {
+    "mtime": 1789701934.948609,
+    "seen": 1790327484.804325,
+    "ast_hash": "e2623f543fba4b2d8de2d83f7a7af82b",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/LocalAiModule.java": {
+    "mtime": 1789701934.948609,
+    "seen": 1790327484.8043287,
+    "ast_hash": "a8da35d16719b51d606d131a827eb761",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/LocalContextAggregator.java": {
+    "mtime": 1789411062.9629965,
+    "seen": 1789700605.3411548,
+    "ast_hash": "13739ed1fd0d5d85affbfc7a9c91b449",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/LogicCenter.java": {
+    "mtime": 1787608266.0070019,
+    "seen": 1789700605.3411558,
+    "ast_hash": "36e4b9c8c31df26f225f892a0bc515f6",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/MaintenanceModule.java": {
+    "mtime": 1787308499.2705808,
+    "seen": 1789700605.3411567,
+    "ast_hash": "eb18aae3f527b54d63b6aa63b6123747",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/MillenniumNet.java": {
+    "mtime": 1789703171.8291638,
+    "seen": 1790327484.8043356,
+    "ast_hash": "f2448a5403387ca590fc9a30cf2fe8f0",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/Mutations.java": {
+    "mtime": 1786559005.4934359,
+    "seen": 1789700605.3411582,
+    "ast_hash": "8d767923b0039d037aabb0e581f1fa7a",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/MuteStore.java": {
+    "mtime": 1789701934.9481082,
+    "seen": 1790327484.8043387,
+    "ast_hash": "215b6be89e90afe4e55fdcc3d770295a",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/NeuralModel.java": {
+    "mtime": 1789701934.9481082,
+    "seen": 1790327484.8043401,
+    "ast_hash": "f53c3b705bc70e45dc43641a810a9f5e",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/PatternPack.java": {
+    "mtime": 1789411527.833871,
+    "seen": 1789700605.3411613,
+    "ast_hash": "0168b1ae5e97afa43c0ec49e65e5b043",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/Phonetics.java": {
+    "mtime": 1786651490.3907254,
+    "seen": 1789700605.341162,
+    "ast_hash": "583418d8e302ad4bf6e514435dc9127e",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/PlayerWipeModule.java": {
+    "mtime": 1790355039.26885,
+    "seen": 1790355113.3386786,
+    "ast_hash": "7cb23d879e32fa7581c292098ff088db",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/PunishmentBridge.java": {
+    "mtime": 1789751974.3523307,
+    "seen": 1790327484.8043478,
+    "ast_hash": "29b68ea37c7833ee5fc2fbdcfca5ef79",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RedeemCodeModule.java": {
+    "mtime": 1789751974.2684524,
+    "seen": 1790327484.8043487,
+    "ast_hash": "64fbde07a30392b77efef128e6c47afb",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RedstoneThrottle.java": {
+    "mtime": 1789413603.483085,
+    "seen": 1789700605.341165,
+    "ast_hash": "3eab69f96966980d823e2556330d0270",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RedstoneUnstaler.java": {
+    "mtime": 1789413603.509023,
+    "seen": 1789700605.3411658,
+    "ast_hash": "8158efd3cddc45b710e1d0679319f126",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/ReviewModule.java": {
+    "mtime": 1789790122.2229662,
+    "seen": 1790327484.8043573,
+    "ast_hash": "76ad6c232d1f8c631cfa33e04bb61f47",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RewardsModule.java": {
+    "mtime": 1790364780.6764047,
+    "seen": 1790368444.5330367,
+    "ast_hash": "e94328da6b863870aa44705499a3dfb1",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/Scripts.java": {
+    "mtime": 1789705166.9248881,
+    "seen": 1790327484.8043623,
+    "ast_hash": "0088368fd086fdfb2b135f7fac920b50",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/SeedCorpus.java": {
+    "mtime": 1789411836.3971822,
+    "seen": 1789700605.3411689,
+    "ast_hash": "ccb37318c40211e6e345c2d655287c28",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/StaffMonitorModule.java": {
+    "mtime": 1790355039.2693498,
+    "seen": 1790355113.3386908,
+    "ast_hash": "2a80500d2d491b0465652a1ac69fb4ad",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/StashModule.java": {
+    "mtime": 1789814066.3570628,
+    "seen": 1790327484.8043685,
+    "ast_hash": "d966e87f0cedb476e4481cddd4535e8b",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/TextFeatures.java": {
+    "mtime": 1786487082.68794,
+    "seen": 1789700605.3411717,
+    "ast_hash": "28cda9817757082ce4c56c7632a230fd",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/Tlds.java": {
+    "mtime": 1786661922.294637,
+    "seen": 1789700605.3411725,
+    "ast_hash": "b24dbdbe8d6b42769f1ecd4d1c4d13ea",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/UiKit.java": {
+    "mtime": 1790354654.648208,
+    "seen": 1790354764.4984372,
+    "ast_hash": "9e210e33a925524c92d78defcbe50e62",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/VanishSupport.java": {
+    "mtime": 1790328554.82659,
+    "seen": 1790328611.543221,
+    "ast_hash": "444f7432f790153a8b5d8bd989e14c68",
+    "semantic_hash": ""
+  },
+  "antiad/DumpCorpus.java": {
+    "mtime": 1789520020.875274,
+    "seen": 1789700605.3411748,
+    "ast_hash": "2cf4583fcafe9a7b16c7312c4ff75518",
+    "semantic_hash": ""
+  },
+  "antiad/TldCheck.java": {
+    "mtime": 1789700237.6425574,
+    "seen": 1789700605.3411756,
+    "ast_hash": "8b0003ebac17013a0e48bcc0b727f21e",
+    "semantic_hash": ""
+  },
+  "antiad/TrainMillennium.java": {
+    "mtime": 1789791823.2092638,
+    "seen": 1790327484.8043902,
+    "ast_hash": "e78158909a6ba13ff904713fe3168e45",
+    "semantic_hash": ""
+  },
+  "antiad/tld_corpus.py": {
+    "mtime": 1789700493.0752492,
+    "seen": 1789700605.341177,
+    "ast_hash": "ce7be2c0e026da1026e5ee6d1694a9d8",
+    "semantic_hash": ""
+  },
+  "ColtCore/README.md": {
+    "mtime": 1789816376.3528402,
+    "seen": 1790327484.8044093,
+    "ast_hash": "f9fca7f4b146389e8b2376372d7afa07",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/resources/commonwords.txt": {
+    "mtime": 1787214838.183328,
+    "seen": 1789700605.3411794,
+    "ast_hash": "e8e4e4d7cc27f83835fe59c09a656d2e",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/resources/config.yml": {
+    "mtime": 1790368314.0028548,
+    "seen": 1790368444.53307,
+    "ast_hash": "4bb3bafb8a8d3646ca7a3de0add084ce",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/resources/plugin.yml": {
+    "mtime": 1790368313.9988484,
+    "seen": 1790368444.533071,
+    "ast_hash": "8225f259cd39eae7c005fa033b32bd21",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/resources/realchat.txt": {
+    "mtime": 1786624897.5584645,
+    "seen": 1789700605.3411818,
+    "ast_hash": "f10ee88daa40aa7680901a841e60de43",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/resources/tlds.txt": {
+    "mtime": 1788293997.5434806,
+    "seen": 1789700605.3411825,
+    "ast_hash": "1a7ba1b6511db9ac2995bf2165d73390",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/README.md": {
+    "mtime": 1789816376.3533401,
+    "seen": 1790327484.8044226,
+    "ast_hash": "9e4471f14486246a4e363c5f323b5444",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/resources/commonwords.txt": {
+    "mtime": 1786670124.296726,
+    "seen": 1789700605.3411846,
+    "ast_hash": "e8e4e4d7cc27f83835fe59c09a656d2e",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/resources/config.yml": {
+    "mtime": 1790368313.9918396,
+    "seen": 1790368444.5330758,
+    "ast_hash": "5004d0abc01fc852b50bc179c11e4c82",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/resources/plugin.yml": {
+    "mtime": 1790368313.9748118,
+    "seen": 1790368444.5330765,
+    "ast_hash": "06992b6fdeaff2010a81400816fe6040",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/resources/realchat.txt": {
+    "mtime": 1786624897.5584645,
+    "seen": 1789700605.3411868,
+    "ast_hash": "f10ee88daa40aa7680901a841e60de43",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/resources/tlds.txt": {
+    "mtime": 1788293997.5434806,
+    "seen": 1789700605.3411875,
+    "ast_hash": "1a7ba1b6511db9ac2995bf2165d73390",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1789816376.3518405,
+    "seen": 1790327484.8044338,
+    "ast_hash": "894b91cb157dcec82969957c9bbf0c90",
+    "semantic_hash": ""
+  },
+  "antiad/tld_iana.txt": {
+    "mtime": 1789697095.8029976,
+    "seen": 1789700605.3411891,
+    "ast_hash": "aeca50caddfeb602fe229342645554f3",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/AntibotGuard.java": {
+    "mtime": 1790324742.765666,
+    "seen": 1790327484.8041818,
+    "ast_hash": "bc9a6172367018cbc4493fd89eee1f39",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/BookSignProximity.java": {
+    "mtime": 1789786063.2109482,
+    "seen": 1790327484.804185,
+    "ast_hash": "4ae02596e546eb5302affa985680376c",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/CommandTemplate.java": {
+    "mtime": 1789751863.2095437,
+    "seen": 1790327484.8041937,
+    "ast_hash": "3edb2155a0cf19e464c0e52915e42760",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/ContextAwareAntiAd.java": {
+    "mtime": 1789786063.2109482,
+    "seen": 1790327484.8041961,
+    "ast_hash": "a5dcc7b644f76f9d4a411f43699f6cf2",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/FlagReviewStore.java": {
+    "mtime": 1789790460.2094977,
+    "seen": 1790327484.8042095,
+    "ast_hash": "1def792d9d0fde14633232d1a3e1b0be",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/JoinRewardModule.java": {
+    "mtime": 1790324732.8039849,
+    "seen": 1790327484.8042169,
+    "ast_hash": "8ed09c29c6cbca44987c1d151baa4b22",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/LitematicReader.java": {
+    "mtime": 1789813430.2134476,
+    "seen": 1790327484.8042245,
+    "ast_hash": "f2f1a98206c8099797fd36c83da9254a",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/NeuralWordCache.java": {
+    "mtime": 1789750371.2198935,
+    "seen": 1790327484.8042395,
+    "ast_hash": "27820086875d61ce9aa79bf9a3591325",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/RenameContextTracker.java": {
+    "mtime": 1789786154.2420607,
+    "seen": 1790327484.8042526,
+    "ast_hash": "ce00c74dd9d7f2f740098b60010b4790",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/ReviewGui.java": {
+    "mtime": 1790346056.6502783,
+    "seen": 1790347021.1803472,
+    "ast_hash": "376e965affec6ddc72cdbaf2ed5a4972",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/RewardsGui.java": {
+    "mtime": 1790364869.995919,
+    "seen": 1790368444.532976,
+    "ast_hash": "440070d0ea7ceca61aa66830c4a4aec0",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/SignContextTracker.java": {
+    "mtime": 1789786117.2075746,
+    "seen": 1790327484.8042636,
+    "ast_hash": "80472464daf189c103f4577e97a9f81c",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/SyntheticPlayerLoader.java": {
+    "mtime": 1790324683.0772283,
+    "seen": 1790327484.8042684,
+    "ast_hash": "97f828478ee309f022af500dc6cc6539",
+    "semantic_hash": ""
+  },
+  "ColtCore/src/main/java/com/coltcore/core/modules/VanishAnnouncer.java": {
+    "mtime": 1790328537.5813327,
+    "seen": 1790328611.5431607,
+    "ast_hash": "378137f4ac71c88c58c2c1d39f2fb777",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/AntibotGuard.java": {
+    "mtime": 1790324887.803239,
+    "seen": 1790327484.8042898,
+    "ast_hash": "af26fc89cce1bfc84bfdfa676a613739",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/BookSignProximity.java": {
+    "mtime": 1789786397.215701,
+    "seen": 1790327484.804291,
+    "ast_hash": "26ea48589c3146611bf79dc3c29f076b",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/CommandTemplate.java": {
+    "mtime": 1789751974.2489338,
+    "seen": 1790327484.8042977,
+    "ast_hash": "4aff19e819656481cbb7ede17950c9dc",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/ContextAwareAntiAd.java": {
+    "mtime": 1789786447.2090802,
+    "seen": 1790327484.8043017,
+    "ast_hash": "41bee2a69c19e5c628d203bbb7f0c9ea",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/FlagReviewStore.java": {
+    "mtime": 1789790640.2070231,
+    "seen": 1790327484.8043134,
+    "ast_hash": "24dfb4f78aecaf89345f398f7f2de773",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/JoinRewardModule.java": {
+    "mtime": 1790324887.7947414,
+    "seen": 1790327484.8043208,
+    "ast_hash": "a08ae76753cb92449545baaa9c159c90",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/LitematicReader.java": {
+    "mtime": 1789814066.3831367,
+    "seen": 1790327484.8043258,
+    "ast_hash": "84127729c661e8148a6d23b7ce70e415",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/NeuralWordCache.java": {
+    "mtime": 1789750378.2255633,
+    "seen": 1790327484.8043416,
+    "ast_hash": "a98f090df99598d8e220c66591623f1a",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RenameContextTracker.java": {
+    "mtime": 1789786386.209849,
+    "seen": 1790327484.8043547,
+    "ast_hash": "8835d5738244111d4a91f11915170df9",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/ReviewGui.java": {
+    "mtime": 1790345996.9493632,
+    "seen": 1790347021.1804368,
+    "ast_hash": "dd50f20f633ad368897ff74291b971cf",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RewardsGui.java": {
+    "mtime": 1790364842.8017142,
+    "seen": 1790368444.5330358,
+    "ast_hash": "706ba0e84cbd2e9b1e78c3fe323fc6a4",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/SignContextTracker.java": {
+    "mtime": 1789786366.2191353,
+    "seen": 1790327484.8043647,
+    "ast_hash": "62942fbb22f3cdbd13dba9e7c991b538",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/SyntheticPlayerLoader.java": {
+    "mtime": 1790324887.7835634,
+    "seen": 1790327484.80437,
+    "ast_hash": "f780aa81f522f8f5b781a983c019f2c7",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/VanishAnnouncer.java": {
+    "mtime": 1790328554.8255827,
+    "seen": 1790328611.54322,
+    "ast_hash": "d0d3d8201b251e778b8819076a9c34f4",
+    "semantic_hash": ""
+  },
+  "antiad/AdvertFormCheck.java": {
+    "mtime": 1789703084.071107,
+    "seen": 1790327484.8043797,
+    "ast_hash": "da8e9dbc3704b6be630f25185dbed043",
+    "semantic_hash": ""
+  },
+  "antiad/BareProbe.java": {
+    "mtime": 1789790378.2070408,
+    "seen": 1790327484.8043807,
+    "ast_hash": "746c63df8bc8feaa6ce2ad5f8bf56726",
+    "semantic_hash": ""
+  },
+  "antiad/ChatBlockProbe.java": {
+    "mtime": 1789743747.7473004,
+    "seen": 1790327484.804383,
+    "ast_hash": "e197c38dc2c28a33a0e3f00e03420937",
+    "semantic_hash": ""
+  },
+  "antiad/ChatMineFilter.java": {
+    "mtime": 1789705523.9791045,
+    "seen": 1790327484.8043842,
+    "ast_hash": "cb8eb391887b4410ec496c1cb6144245",
+    "semantic_hash": ""
+  },
+  "antiad/ModelProbe.java": {
+    "mtime": 1789704813.5933135,
+    "seen": 1790327484.8043873,
+    "ast_hash": "d82a65ff759a6d4942a78e9ce0326442",
+    "semantic_hash": ""
+  },
+  "antiad/ZeroTokenCheck.java": {
+    "mtime": 1789703166.0941713,
+    "seen": 1790327484.8043914,
+    "ast_hash": "ca195bd2717378620a12e37ad2855065",
+    "semantic_hash": ""
+  },
+  "antiad/build_corpus_v2.py": {
+    "mtime": 1789744237.4881597,
+    "seen": 1790327484.8043928,
+    "ast_hash": "9654f2c3014f40ffa5161e41cd709562",
+    "semantic_hash": ""
+  },
+  "antiad/fancychat_src.java": {
+    "mtime": 1789711032.4522443,
+    "seen": 1790327484.8043954,
+    "ast_hash": "495027b8f5aed337dbe225bedcefd69b",
+    "semantic_hash": ""
+  },
+  "antiad/patch_advertonly.py": {
+    "mtime": 1789706423.662225,
+    "seen": 1790327484.804397,
+    "ast_hash": "66ccdd12032c6ea58e7d95bb1726a7dd",
+    "semantic_hash": ""
+  },
+  "antiad/patch_chatguard.py": {
+    "mtime": 1789703027.5055778,
+    "seen": 1790327484.804398,
+    "ast_hash": "3c1e346dfc0fb89123885c9b2d75f86e",
+    "semantic_hash": ""
+  },
+  "antiad/patch_content.py": {
+    "mtime": 1789704673.5452726,
+    "seen": 1790327484.8044007,
+    "ast_hash": "aa2f95d0c649ea26a1806c3a65b87149",
+    "semantic_hash": ""
+  },
+  "antiad/patch_dead.py": {
+    "mtime": 1789706139.4044516,
+    "seen": 1790327484.8044016,
+    "ast_hash": "0450656c832390c72ec89b25fb80afcb",
+    "semantic_hash": ""
+  },
+  "antiad/patch_dos.py": {
+    "mtime": 1789704264.0293837,
+    "seen": 1790327484.8044028,
+    "ast_hash": "cd659269f33bb6818ed7b374dab7bb32",
+    "semantic_hash": ""
+  },
+  "antiad/patch_millenniumnet.py": {
+    "mtime": 1789703164.8831549,
+    "seen": 1790327484.8044043,
+    "ast_hash": "2e04d015e569dcb1b02ed88db54ea4a9",
+    "semantic_hash": ""
+  },
+  "antiad/patch_scripts.py": {
+    "mtime": 1789705162.2339118,
+    "seen": 1790327484.8044055,
+    "ast_hash": "93096dc4b05e49c41789c6bf83317be1",
+    "semantic_hash": ""
+  },
+  "antiad/patch_surfaces.py": {
+    "mtime": 1789705037.3463905,
+    "seen": 1790327484.804407,
+    "ast_hash": "e12ea2d1f0cdf2d37e8b82405d699370",
+    "semantic_hash": ""
+  },
+  "antiad/acceptance_in.txt": {
+    "mtime": 1789785365.853694,
+    "seen": 1790327484.8044353,
+    "ast_hash": "4aab8a8f142a6b9b1db26f6e2484bdcc",
+    "semantic_hash": ""
+  },
+  "antiad/af_baseline.txt": {
+    "mtime": 1789792769.416994,
+    "seen": 1790327484.8044367,
+    "ast_hash": "d007afa40fabda2a2b3113f5125dd97b",
+    "semantic_hash": ""
+  },
+  "antiad/af_v2.txt": {
+    "mtime": 1789744463.3180673,
+    "seen": 1790327484.804438,
+    "ast_hash": "42177a11b44d35365fc975cb48d6e0f5",
+    "semantic_hash": ""
+  },
+  "antiad/cbp_full_v2.txt": {
+    "mtime": 1789745615.5912216,
+    "seen": 1790327484.8044393,
+    "ast_hash": "b990c692d27ea485ea5e02eb8830fb8a",
+    "semantic_hash": ""
+  },
+  "antiad/cbp_leak_v2.txt": {
+    "mtime": 1789745567.4391174,
+    "seen": 1790327484.8044405,
+    "ast_hash": "665c6fafe4222f0c524f4265fc96d928",
+    "semantic_hash": ""
+  },
+  "antiad/cbp_realchat_v2.txt": {
+    "mtime": 1789745550.7244153,
+    "seen": 1790327484.8044415,
+    "ast_hash": "665c6fafe4222f0c524f4265fc96d928",
+    "semantic_hash": ""
+  },
+  "antiad/cbp_v2.txt": {
+    "mtime": 1789745541.495644,
+    "seen": 1790327484.8044436,
+    "ast_hash": "7593f56c3fe0fb3fc1d83fa3c1dc4d54",
+    "semantic_hash": ""
+  },
+  "antiad/chat_corpus.txt": {
+    "mtime": 1789745609.8266854,
+    "seen": 1790327484.8044453,
+    "ast_hash": "469c86100e8769378c0689720ddbf061",
+    "semantic_hash": ""
+  },
+  "antiad/chat_flagged.txt": {
+    "mtime": 1789705533.6612525,
+    "seen": 1790327484.804446,
+    "ast_hash": "5ec4c9ed928353be8e52dce58136dfe3",
+    "semantic_hash": ""
+  },
+  "antiad/fancychat_cases.txt": {
+    "mtime": 1789710337.980373,
+    "seen": 1790327484.8044467,
+    "ast_hash": "87e1679f1e0d973abb5477418d932796",
+    "semantic_hash": ""
+  },
+  "antiad/probe_v1.txt": {
+    "mtime": 1789740018.725476,
+    "seen": 1790327484.8044496,
+    "ast_hash": "f6720c84b3ac7e8314f1559c7c635477",
+    "semantic_hash": ""
+  },
+  "antiad/probe_v1_newprobe.txt": {
+    "mtime": 1789744290.0775316,
+    "seen": 1790327484.8044531,
+    "ast_hash": "3716cfd99c89dcd08a799fb43f866378",
+    "semantic_hash": ""
+  },
+  "antiad/probe_v2.txt": {
+    "mtime": 1789740022.4460511,
+    "seen": 1790327484.804454,
+    "ast_hash": "148987226e0545beb188cccf5ea49581",
+    "semantic_hash": ""
+  },
+  "antiad/probe_v2_newprobe.txt": {
+    "mtime": 1789744287.6897104,
+    "seen": 1790327484.8044555,
+    "ast_hash": "00e30df5dc9ca1ea59864ecb0d4d7d68",
+    "semantic_hash": ""
+  },
+  "antiad/probe_v3.txt": {
+    "mtime": 1789744099.1557665,
+    "seen": 1790327484.8044567,
+    "ast_hash": "893d2e03ec02781dfc7a831dd8b5d278",
+    "semantic_hash": ""
+  },
+  "antiad/rp_v1.txt": {
+    "mtime": 1789744154.2379837,
+    "seen": 1790327484.8044574,
+    "ast_hash": "604d01048268474b0d65871fa98e0972",
+    "semantic_hash": ""
+  },
+  "antiad/rp_v2.txt": {
+    "mtime": 1789744156.5813925,
+    "seen": 1790327484.8044603,
+    "ast_hash": "b30bd2d90382210b52fad08d8256938a",
+    "semantic_hash": ""
+  },
+  "antiad/rp_v3.txt": {
+    "mtime": 1789744158.911173,
+    "seen": 1790327484.8044615,
+    "ast_hash": "974718fab23aef57a4242fab210a5591",
+    "semantic_hash": ""
+  },
+  "antiad/zt_v2.txt": {
+    "mtime": 1789744463.1401422,
+    "seen": 1790327484.8044653,
+    "ast_hash": "bfcf032fd201682837bcf3e594ac848f",
+    "semantic_hash": ""
+  }
+}

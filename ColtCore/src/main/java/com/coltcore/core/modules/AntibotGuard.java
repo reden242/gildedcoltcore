@@ -141,6 +141,7 @@ public final class AntibotGuard implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         touch(event.getPlayer());
         contagionBan(event.getPlayer());
     }
@@ -173,6 +174,7 @@ public final class AntibotGuard implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onQuit(PlayerQuitEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         UUID id = event.getPlayer().getUniqueId();
         this.lastActive.remove(id);
         save();

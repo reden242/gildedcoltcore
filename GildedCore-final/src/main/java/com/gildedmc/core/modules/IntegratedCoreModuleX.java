@@ -153,7 +153,8 @@ public final class IntegratedCoreModuleX {
             return false;
         }
         // Was a hardcoded username. Names are spoofable on offline-mode and
-        // misconfigured-proxy servers, so the permission node is the gate.
+        // misconfigured-proxy servers, so the permission node is the gate -
+        // the command path already passed GildedCorePlugin.authorise too.
         if (!((Player) commandSender).hasPermission("gildedcore.admin")) {
             commandSender.sendMessage("\u00a7cOnly admins can use this.");
             return false;
@@ -271,7 +272,8 @@ public final class IntegratedCoreModuleX {
                 return true;
             }
             if (string2.equals("preview")) {
-                player.sendMessage(this.formatJoin(player));
+                player.sendMessage("\u00a7eJoin, quit and vanish messages are handled by this plugin.");
+                player.sendMessage("\u00a78See the vanish-announce block in config.yml.");
                 return true;
             }
             if (string2.equals("set")) {
@@ -292,32 +294,23 @@ public final class IntegratedCoreModuleX {
             return true;
         }
 
+        /**
+         * Join and quit messages are owned by {@link VanishAnnouncer}'s sibling
+         * handling in the host plugin, not here.
+         *
+         * <p>This handler only stays to silence the vanilla broadcast, so the
+         * server never emits two sets of join/quit lines. The synthetic-player
+         * guard is also kept here: a temporary offline load for a wipe must
+         * never be announced.
+         */
         @EventHandler
         public void onJoin(PlayerJoinEvent playerJoinEvent) {
-            Player player = playerJoinEvent.getPlayer();
-            // Vanished players must not trigger vanilla, formatted or custom
-            // join messages. The main plugin also suppresses rank alerts.
-            playerJoinEvent.setJoinMessage(VanishSupport.isVanished(player) ? null : this.formatJoin(player));
+            playerJoinEvent.setJoinMessage(null);
         }
 
         @EventHandler(priority = EventPriority.MONITOR)
         public void onQuit(PlayerQuitEvent e) {
-            Player player = e.getPlayer();
             e.quitMessage(null);
-            if (!VanishSupport.isVanished(player)) {
-                Bukkit.broadcastMessage(IntegratedCoreModuleX.cc("&c[-] &f" + player.getName()));
-            }
-        }
-
-        private String formatJoin(Player player) {
-            if (VanishSupport.isVanished(player)) return "";
-            String string = IntegratedCoreModuleX.joinMessage(player);
-            String string2 = IntegratedCoreModuleX.RULE + "\n" + IntegratedCoreModuleX.rankPrefix(player)
-                    + "\u00a7f" + player.getName() + " \u00a77joined the server";
-            if (string != null && !string.isEmpty()) {
-                string2 = string2 + "\n\u00a77" + string;
-            }
-            return string2 + "\n" + IntegratedCoreModuleX.RULE;
         }
 
         @Override
@@ -360,7 +353,7 @@ public final class IntegratedCoreModuleX {
                 return true;
             }
             if (stringArray.length < 1) {
-                commandSender.sendMessage("\u00a7cUsage: /playerwipe <player>");
+                commandSender.sendMessage("\u00a7cUsage: Playerwipe <player>");
                 return true;
             }
             Player player = (Player)commandSender;

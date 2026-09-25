@@ -14,6 +14,12 @@ softdepend:
 - Vault
 - LuckPerms
 - RoseStacker
+    - Matrix
+    - Vulcan
+    - LightningGrim
+    - GroundedGrim
+    - TotemGuard
+    - Kratos
 depend:
 - WorldEdit
 commands:
@@ -77,13 +83,9 @@ commands:
     description: Queue players for one shared RTP drop.
     usage: /rtpqueue
     permission: coltcore.rtpqueue
-  billfordadmin:
-    description: Manage BillFord set trades.
-    usage: /billfordadmin <open|reload|setcost|setname>
-    permission: gildedbillford.admin
   playerwipe:
     description: Owner-only player data wipe UI.
-    usage: /playerwipe <player>
+    usage: Playerwipe <player|uuid|list|refreshindex>
     permission: coltcore.playerwipe
   joinmessage:
     description: Set your custom join message.
@@ -224,8 +226,6 @@ permissions:
   coltcore.ping:
     description: Show your own or another player's ping.
     default: true
-  gildedbillford.admin:
-    default: op
   gildedlagguard.admin:
     default: op
   gildedlagguard.bypass:

@@ -14,6 +14,18 @@ softdepend:
 - Vault
 - LuckPerms
 - RoseStacker
+- Kratos
+- MLSAC
+- TotemGuard
+- AngleGuard
+- GrimAC
+- GroundedGrim
+- LightningGrim
+- BaritoneDestroyer
+    - BaritoneRemover
+    - AntiSpoof
+- Vulcan
+- Matrix
 depend:
 - WorldEdit
 commands:
@@ -77,13 +89,9 @@ commands:
     description: Queue players for one shared RTP drop.
     usage: /rtpqueue
     permission: gildedcore.rtpqueue
-  billfordadmin:
-    description: Manage BillFord set trades.
-    usage: /billfordadmin <open|reload|setcost|setname>
-    permission: gildedbillford.admin
   playerwipe:
     description: Owner-only player data wipe UI.
-    usage: /playerwipe <player>
+    usage: Playerwipe <player|uuid|list|refreshindex>
     permission: gildedcore.playerwipe
   joinmessage:
     description: Set your custom join message.
@@ -222,8 +230,6 @@ permissions:
   gildedcore.ping:
     description: Show your own or another player's ping.
     default: true
-  gildedbillford.admin:
-    default: op
   gildedlagguard.admin:
     default: op
   gildedlagguard.bypass:

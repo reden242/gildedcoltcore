@@ -25,7 +25,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * {@code /coltcore} â€” the hub, the health report, and the self-test.
+ * {@code /ColtCore} â€” the hub, the health report, and the self-test.
  *
  * <h2>Why a self-test</h2>
  * Almost everything this plugin decides is driven by config: ladder rungs,
@@ -136,7 +136,7 @@ public final class DiagnosticsModule implements Listener {
 
     private void status(CommandSender to) {
         to.sendMessage(UiKit.colour("&8&m----------------------------------------"));
-        to.sendMessage(UiKit.colour("&#00ff00&lCOLTCORE &7v"
+        to.sendMessage(UiKit.colour("&#00ff00&lColtCore &7v"
                 + this.plugin.getDescription().getVersion()
                 + " &8| &7config v" + this.plugin.getConfig().getInt("config-version", 0)));
 
@@ -172,7 +172,7 @@ public final class DiagnosticsModule implements Listener {
                     ? "every " + (this.maintenance == null ? 24 : this.maintenance.intervalHours()) + "h, last: "
                       + (this.maintenance == null ? "none" : this.maintenance.lastResult())
                     : "&cDISABLED - tables grow without limit")));
-        to.sendMessage(UiKit.colour("&8/coltcore <status|selftest|perms|prune|menu|reload>"));
+        to.sendMessage(UiKit.colour("&8/ColtCore <status|selftest|perms|prune|menu|reload>"));
         to.sendMessage(UiKit.colour("&8&m----------------------------------------"));
     }
 
@@ -422,24 +422,34 @@ public final class DiagnosticsModule implements Listener {
     /* ------------------------------------------------------------------ */
 
     private void openHub(Player viewer) {
-        Inventory inv = UiKit.chest(4, "&8ColtCore");
-        inv.setItem(4, UiKit.item(Material.NETHER_STAR, "&#00ff00&lCOLTCORE &7v"
+        Inventory inv = UiKit.themed(4, "&8ColtCore");
+        UiKit.framed(inv, UiKit.FRAME_EDGE, UiKit.FRAME_CORNER);
+
+        // Title sits centred in the top border row, the way the reference hub
+        // does. The border is dark with orange corners, so the star reads as the
+        // menu's heading rather than as a button.
+        inv.setItem(4, UiKit.item(Material.NETHER_STAR, "&#00ff00&lColtCore &7v"
                         + this.plugin.getDescription().getVersion(),
                 "&7Everything below opens a command.",
                 "&8Config v" + this.plugin.getConfig().getInt("config-version", 0)));
 
-        inv.setItem(10, UiKit.card(Material.BARRIER, "&4&lPLAYER WIPE", "Reset a player",
+        // Upper panel: the things staff reach for.
+        inv.setItem(10, UiKit.card(Material.BARRIER, UiKit.titleGradient("Playerwipe"), "Reset a player",
                 List.of("Shards, money, stats, playtime, homes."),
-                "Runs console commands. No undo.", "to see the usage"));
+                "Runs console commands. No undo.", "to choose a player"));
         inv.setItem(12, UiKit.card(Material.ENDER_EYE, "&d&lMOST AFK", "Staff idle leaderboard",
                 List.of("Ranked by total idle time, worst first."), null, "to open /staffafk"));
         inv.setItem(13, UiKit.card(Material.SHIELD, "&b&lTEXT GUARD", "Chat, signs, books, names",
                 List.of("Escalation ladder and mute records."), null, "to open /textguard"));
-        inv.setItem(15, UiKit.card(Material.AMETHYST_SHARD, "&e&lLOCAL AI", "In-process classifier",
+        inv.setItem(14, UiKit.card(Material.AMETHYST_SHARD, "&e&lLOCAL AI", "In-process classifier",
                 List.of("Training status, readiness and shadow mode."), null, "to open /textguard model"));
         inv.setItem(16, UiKit.card(Material.EXPERIENCE_BOTTLE, "&a&lACTIVE RANK", "Playtime rank",
                 List.of("Progress towards the active rank."), null, "to open /activerank"));
 
+        // Limit row: separates the two panels so the grouping is obvious.
+        UiKit.limitRow(inv, 2, Material.LIGHT_GRAY_STAINED_GLASS_PANE, Material.GRAY_STAINED_GLASS_PANE);
+
+        // Lower panel: maintenance and self-check, on the bottom row.
         inv.setItem(29, UiKit.card(Material.COMPARATOR, "&f&lSTATUS", "Health report",
                 List.of("Which modules are on, which optional",
                         "plugins are present, stored row counts."), null, "to run it"));
@@ -450,7 +460,7 @@ public final class DiagnosticsModule implements Listener {
         inv.setItem(33, UiKit.card(Material.HOPPER, "&f&lPRUNE NOW", "Retention sweep",
                 List.of("Deletes evidence and punishment rows",
                         "past their retention."), null, "to run it"));
-        UiKit.fill(inv);
+        inv.setItem(34, UiKit.close());
 
         this.open.put(viewer.getUniqueId(), inv);
         viewer.openInventory(inv);
@@ -468,9 +478,11 @@ public final class DiagnosticsModule implements Listener {
         if (name == null || name.isBlank()) return;
 
         switch (name.trim()) {
-            case "PLAYER WIPE" -> {
+            case "Playerwipe" -> {
+                // Route through the command so the shared player picker opens
+                // rather than printing a usage line at staff.
                 p.closeInventory();
-                p.sendMessage(UiKit.colour("&eUsage: &f/playerwipe <player>"));
+                p.performCommand("playerwipe");
             }
             case "MOST AFK" -> { p.closeInventory(); p.performCommand("staffafk"); }
             case "TEXT GUARD" -> { p.closeInventory(); p.performCommand("textguard status"); }

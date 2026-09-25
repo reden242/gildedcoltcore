@@ -45,7 +45,6 @@
 package com.coltcore.core;
 
 import com.coltcore.core.modules.AntiAdPipeline;
-import com.coltcore.core.modules.BillFordModule;
 import com.coltcore.core.modules.ChatLimiterModule;
 import com.coltcore.core.modules.CreativeGuardModule;
 import com.coltcore.core.modules.ContextAwareAntiAd;
@@ -66,6 +65,7 @@ import com.coltcore.core.modules.RewardsModule;
 import com.coltcore.core.modules.DeepslateDecoyModule;
 import com.coltcore.core.modules.KelpGrowthModule;
 import com.coltcore.core.modules.StaffMonitorModule;
+import com.coltcore.core.modules.SyntheticPlayerLoader;
 import com.coltcore.core.modules.ChatGuardModule;
 import com.coltcore.core.modules.CommandTemplate;
 import com.coltcore.core.modules.ActiveRankModule;
@@ -190,6 +190,13 @@ implements Listener {
     }
 
     private final List<String> staffRanks = STAFF_ROLES;
+    private com.coltcore.core.modules.VanishAnnouncer vanishAnnouncer;
+    private com.coltcore.core.ui.RecentPlayerTracker recentPlayers;
+    private com.coltcore.core.ui.PlayerPicker playerPicker;
+    private com.coltcore.core.ui.PlayerTargetGate playerTargetGate;
+    private String lastCommandName;
+    private String lastCommandLabel;
+    private CommandSender lastCommandSender;
     private String activeRtpQueueWorld;
     private SchedulerCompat.ManagedTask tipTask;
     private SchedulerCompat.ManagedTask rtpTask;
@@ -202,7 +209,6 @@ implements Listener {
     private FileConfiguration codes;
     private ChatLimiterModule chatLimiterModule;
     private CreativeGuardModule creativeGuardModule;
-    private BillFordModule billFordModule;
     private StashModule stashModule;
     private DeepslateDecoyModule deepslateDecoyModule;
     private KelpGrowthModule kelpGrowthModule;
@@ -242,15 +248,20 @@ implements Listener {
         this.luckPerms = provider == null ? null : (LuckPerms)provider.getProvider();
         Bukkit.getPluginManager().registerEvents((Listener)this, (Plugin)this);
         this.chatLimiterModule = new ChatLimiterModule(this);
-        this.billFordModule = new BillFordModule(this);
-        this.billFordModule.enable();
         // The dedicated minecart limiter is retired: EntityLimitModule now owns
         // the per-chunk cap and the minecart refund, and it does so silently.
         Bukkit.getPluginManager().registerEvents((Listener)this.chatLimiterModule, (Plugin)this);
-        Bukkit.getPluginManager().registerEvents((Listener)this.billFordModule, (Plugin)this);
         IntegratedCoreModuleX.register(this);
-        this.joinPacketIsolation = new JoinPacketIsolation(this);
-        this.joinPacketIsolation.enable();
+        // JoinPacketIsolation subclasses ProtocolLib's PacketAdapter, so merely
+        // touching the class throws NoClassDefFoundError when ProtocolLib is
+        // absent. It is declared softdepend, so the reference has to be guarded
+        // or the whole plugin fails to enable on any server without it.
+        if (isPluginUsable("ProtocolLib")) {
+            this.joinPacketIsolation = new JoinPacketIsolation(this);
+            this.joinPacketIsolation.enable();
+        } else {
+            this.getLogger().info("ProtocolLib absent: join packet isolation disabled.");
+        }
         this.stashModule = new StashModule(this);
         this.stashModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.stashModule, (Plugin)this);
@@ -260,6 +271,7 @@ implements Listener {
         this.kelpGrowthModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.kelpGrowthModule, (Plugin)this);
         this.staffMonitorModule = new StaffMonitorModule(this);
+        this.staffMonitorModule.setStaffPredicate(p -> STAFF_ROLES.contains(this.group(p)));
         this.staffMonitorModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.staffMonitorModule, (Plugin)this);
         this.chatGuardModule = new ChatGuardModule(this);
@@ -303,6 +315,7 @@ implements Listener {
         this.redeemModule.setCreatorGate(this::isManagerPlus);
         this.rewardsModule = new RewardsModule(this);
         this.rewardsModule.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.rewardsModule, (Plugin)this);
         this.antibotGuard = new AntibotGuard(this);
         this.antibotGuard.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.antibotGuard, (Plugin)this);
@@ -332,7 +345,58 @@ implements Listener {
                 this.chatGuardModule,
                 null, this.playerWipeModule, this.activeRankModule);
         Bukkit.getPluginManager().registerEvents((Listener)this.diagnosticsModule, (Plugin)this);
+        // Self-contained vanish integration. Posts a leave/join message on
+        // vanish and unvanish without depending on any join-message plugin.
+        this.vanishAnnouncer = new com.coltcore.core.modules.VanishAnnouncer(this,
+                new com.coltcore.core.modules.VanishAnnouncer.RankContext() {
+                    @Override
+                    public String prefix(Player player) {
+                        return ColtCorePlugin.this.prefix(player);
+                    }
+
+                    @Override
+                    public boolean isRanked(Player player) {
+                        String group = ColtCorePlugin.this.group(player);
+                        return group != null && !group.equals("default");
+                    }
+                });
+        this.vanishAnnouncer.enable();
+        setupPlayerPicker();
     }
+
+    /**
+     * The shared player picker.
+     *
+     * <p>Any command that needs a username opens this instead of printing a
+     * usage line: online players first, then recently departed, with a written
+     * book for entering any other name.
+     */
+    private void setupPlayerPicker() {
+        try {
+            this.recentPlayers = new com.coltcore.core.ui.RecentPlayerTracker();
+            this.recentPlayers.configure(
+                    this.getConfig().getInt("player-picker.recent-window-seconds", 900),
+                    this.getConfig().getInt("player-picker.recent-max", 200));
+            this.playerPicker = new com.coltcore.core.ui.PlayerPicker(this, this.recentPlayers,
+                    this.getConfig().getString("player-picker.title", "&8Choose a player"));
+            this.playerTargetGate = new com.coltcore.core.ui.PlayerTargetGate(this.playerPicker,
+                    rebuilt -> {
+                        org.bukkit.command.Command command = this.getCommand(this.lastCommandName);
+                        if (command == null) command = this.getCommand(this.lastCommandLabel);
+                        if (command == null) {
+                            this.lastCommandSender.sendMessage("§cCould not re-run that command.");
+                            return false;
+                        }
+                        return this.onCommand(this.lastCommandSender, command,
+                                this.lastCommandLabel, rebuilt);
+                    });
+            Bukkit.getPluginManager().registerEvents((Listener) this.recentPlayers, (Plugin) this);
+            Bukkit.getPluginManager().registerEvents((Listener) this.playerPicker, (Plugin) this);
+        } catch (Throwable t) {
+            this.getLogger().warning("Player picker failed to start: " + t);
+        }
+    }
+
 
     /** /flagreview: staff flag-review queue. Rank gate lives in the GUI. */
     private boolean openFlagReview(CommandSender sender) {
@@ -354,6 +418,19 @@ implements Listener {
         return this.rewardsModule.command(sender, args);
     }
 
+    /**
+     * True when a soft dependency is both present and actually enabled.
+     *
+     * <p>Presence is not enough. A plugin that registers and then fails its own
+     * enable - ProtocolLib 5.5 needs Java 25 and dies on Java 21, for example -
+     * is still returned by {@code getPlugin}, so a null check alone lets the
+     * caller load classes that were never made available and the whole plugin
+     * fails to start for a reason that looks nothing like the real cause.
+     */
+    private static boolean isPluginUsable(String name) {
+        org.bukkit.plugin.Plugin plugin = Bukkit.getPluginManager().getPlugin(name);
+        return plugin != null && plugin.isEnabled();
+    }
     /** Points a command declared in plugin.yml back at this plugin's onCommand. */
     private void rebind(String command) {
         try {
@@ -402,6 +479,7 @@ implements Listener {
     }
 
     public void onDisable() {
+        if (this.vanishAnnouncer != null) this.vanishAnnouncer.close();
         if (this.joinPacketIsolation != null) this.joinPacketIsolation.disable();
         if (this.tipTask != null) {
             this.tipTask.cancel();
@@ -436,6 +514,15 @@ implements Listener {
         String name;
         name = command.getName().toLowerCase(Locale.ROOT);
         if (!authorise(sender, name)) return true;
+        // Any command needing a username opens the shared picker instead of
+        // printing a usage line. The dispatch context is kept so the chosen
+        // name can be spliced back into the same command.
+        this.lastCommandName = name;
+        this.lastCommandLabel = label;
+        this.lastCommandSender = sender;
+        if (this.playerTargetGate != null && this.playerTargetGate.intercept(sender, name, label, args)) {
+            return true;
+        }
         return switch (name) {
             case "coltcore" -> this.reload(sender, args);
             case "announce" -> this.announce(sender, args);
@@ -451,7 +538,6 @@ implements Listener {
             case "announcements" -> this.togglePreference(sender, "announcements", "Announcements");
             case "block", "ignore" -> this.block(sender, label, args);
             case "rtpqueue" -> this.rtpQueue(sender, args);
-            case "billfordadmin" -> this.billFordModule.admin(sender, args);
             case "spawnstash" -> this.stashModule.command(sender, args);
             case "deepslatedecoy" -> this.deepslateDecoyModule.command(sender, args);
             case "staffmonitor", "staffactivity", "staffafk" ->
@@ -505,7 +591,6 @@ implements Listener {
             Map.entry("promote",          "coltcore.staffmanager"),
             Map.entry("demote",           "coltcore.staffmanager"),
             Map.entry("hire",             "coltcore.staffmanager"),
-            Map.entry("billfordadmin",    "gildedbillford.admin"),
             Map.entry("spawnstash",       "coltcore.spawnstash"),
             Map.entry("deepslatedecoy",   "coltcore.deepslatedecoy"),
             Map.entry("staffmonitor",     "staffmonitor.view"),
@@ -587,7 +672,6 @@ implements Listener {
             if (this.antiAdPipeline != null) this.antiAdPipeline.reload();
             this.loadFiles();
             this.chatLimiterModule.reload();
-            this.billFordModule.reload();
             this.stashModule.reload();
             this.deepslateDecoyModule.reload();
             this.kelpGrowthModule.reload();
@@ -1247,6 +1331,7 @@ implements Listener {
 
     @EventHandler(priority=EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         Player player = event.getPlayer();
         event.joinMessage(null);
         SchedulerCompat.runLater(this, () -> this.completeJoin(player), 1L);
@@ -1278,6 +1363,7 @@ implements Listener {
 
     @EventHandler
     public void onJoinGateQuit(PlayerQuitEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         if (this.joinPacketIsolation != null) this.joinPacketIsolation.unlock(event.getPlayer());
     }
 
@@ -1852,9 +1938,6 @@ implements Listener {
         if (name.equals("coltclear") || name.equals("gclear") || name.equals("gildedclear")) {
             return this.complete(args, List.of("clear", "status", "reload"));
         }
-        if (name.equals("billfordadmin")) {
-            return args.length == 1 ? this.complete(args, List.of("open", "reload", "setcost", "setname")) : Collections.emptyList();
-        }
         if (name.equals("greset")) {
             return args.length == 1 ? this.complete(args, List.of("code", "economy", "shards", "soulshards", "playerdata", "user", "worlds", "all", "resetall", "reload")) : (args.length == 2 && args[0].equalsIgnoreCase("code") ? this.complete(args, List.of("generate", "new")) : (args.length == 2 ? this.complete(args, List.of("confirm")) : Collections.emptyList()));
         }
@@ -1974,6 +2057,5 @@ implements Listener {
     }
 
 }
-
 
 

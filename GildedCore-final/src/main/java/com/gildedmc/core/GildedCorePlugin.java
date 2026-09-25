@@ -45,36 +45,36 @@
 package com.gildedmc.core;
 
 import com.gildedmc.core.modules.AntiAdPipeline;
-import com.gildedmc.core.modules.BillFordModule;
 import com.gildedmc.core.modules.ChatLimiterModule;
 import com.gildedmc.core.modules.CreativeGuardModule;
+import com.gildedmc.core.modules.ContextAwareAntiAd;
 import com.gildedmc.core.modules.IntegratedCoreModuleX;
 import com.gildedmc.core.modules.JoinPacketIsolation;
+import com.gildedmc.core.modules.RenameContextTracker;
+import com.gildedmc.core.modules.RewardsGui;
+import com.gildedmc.core.modules.FlagReviewStore;
+import com.gildedmc.core.modules.ReviewGui;
+import com.gildedmc.core.modules.ReviewModule;
+import com.gildedmc.core.modules.SignContextTracker;
 import com.gildedmc.core.modules.StashModule;
+import com.gildedmc.core.modules.RedeemCodeModule;
+import com.gildedmc.core.modules.AntibotGuard;
+import com.gildedmc.core.modules.JoinRewardModule;
+import com.gildedmc.core.modules.EntityLimitModule;
+import com.gildedmc.core.modules.RewardsModule;
 import com.gildedmc.core.modules.DeepslateDecoyModule;
 import com.gildedmc.core.modules.KelpGrowthModule;
 import com.gildedmc.core.modules.StaffMonitorModule;
+import com.gildedmc.core.modules.SyntheticPlayerLoader;
 import com.gildedmc.core.modules.ChatGuardModule;
 import com.gildedmc.core.modules.CommandTemplate;
-import com.gildedmc.core.modules.ContextAwareAntiAd;
 import com.gildedmc.core.modules.ActiveRankModule;
 import com.gildedmc.core.modules.DiagnosticsModule;
 import com.gildedmc.core.modules.UiKit;
 import com.gildedmc.core.modules.RedstoneThrottle;
 import com.gildedmc.core.modules.RedstoneUnstaler;
 import com.gildedmc.core.modules.PlayerWipeModule;
-import com.gildedmc.core.modules.RenameContextTracker;
-import com.gildedmc.core.modules.ReviewGui;
-import com.gildedmc.core.modules.RedeemCodeModule;
-import com.gildedmc.core.modules.EntityLimitModule;
-import com.gildedmc.core.modules.RewardsModule;
-import com.gildedmc.core.modules.AntibotGuard;
-import com.gildedmc.core.modules.JoinRewardModule;
-import com.gildedmc.core.modules.RewardsGui;
-import com.gildedmc.core.modules.ReviewModule;
 import com.gildedmc.core.modules.ConsoleGuard;
-import com.gildedmc.core.modules.FlagReviewStore;
-import com.gildedmc.core.modules.SignContextTracker;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.io.File;
 import java.io.IOException;
@@ -190,6 +190,14 @@ implements Listener {
     }
 
     private final List<String> staffRanks = STAFF_ROLES;
+    private com.gildedmc.core.modules.VanishAnnouncer vanishAnnouncer;
+
+    private com.gildedmc.core.ui.RecentPlayerTracker recentPlayers;
+    private com.gildedmc.core.ui.PlayerPicker playerPicker;
+    private com.gildedmc.core.ui.PlayerTargetGate playerTargetGate;
+    private String lastCommandName;
+    private String lastCommandLabel;
+    private CommandSender lastCommandSender;
     private String activeRtpQueueWorld;
     private SchedulerCompat.ManagedTask tipTask;
     private SchedulerCompat.ManagedTask rtpTask;
@@ -202,7 +210,6 @@ implements Listener {
     private FileConfiguration codes;
     private ChatLimiterModule chatLimiterModule;
     private CreativeGuardModule creativeGuardModule;
-    private BillFordModule billFordModule;
     private StashModule stashModule;
     private DeepslateDecoyModule deepslateDecoyModule;
     private KelpGrowthModule kelpGrowthModule;
@@ -212,6 +219,7 @@ implements Listener {
     private SignContextTracker signContextTracker;
     private RenameContextTracker renameContextTracker;
     private ContextAwareAntiAd contextAwareAntiAd;
+    private RewardsGui rewardsGui;
     private FlagReviewStore flagReviewStore;
     private ReviewGui reviewGui;
 
@@ -225,7 +233,6 @@ implements Listener {
     private RedeemCodeModule redeemModule;
     private RewardsModule rewardsModule;
     private AntibotGuard antibotGuard;
-    private RewardsGui rewardsGui;
     private JoinRewardModule joinRewardModule;
     private EntityLimitModule entityLimitModule;
     private ConsoleGuard consoleGuard;
@@ -242,15 +249,20 @@ implements Listener {
         this.luckPerms = provider == null ? null : (LuckPerms)provider.getProvider();
         Bukkit.getPluginManager().registerEvents((Listener)this, (Plugin)this);
         this.chatLimiterModule = new ChatLimiterModule(this);
-        this.billFordModule = new BillFordModule(this);
-        this.billFordModule.enable();
         // The dedicated minecart limiter is retired: EntityLimitModule now owns
         // the per-chunk cap and the minecart refund, and it does so silently.
         Bukkit.getPluginManager().registerEvents((Listener)this.chatLimiterModule, (Plugin)this);
-        Bukkit.getPluginManager().registerEvents((Listener)this.billFordModule, (Plugin)this);
         IntegratedCoreModuleX.register(this);
-        this.joinPacketIsolation = new JoinPacketIsolation(this);
-        this.joinPacketIsolation.enable();
+        // JoinPacketIsolation subclasses ProtocolLib's PacketAdapter, so merely
+        // touching the class throws NoClassDefFoundError when ProtocolLib is
+        // absent. It is declared softdepend, so the reference has to be guarded
+        // or the whole plugin fails to enable on any server without it.
+        if (isPluginUsable("ProtocolLib")) {
+            this.joinPacketIsolation = new JoinPacketIsolation(this);
+            this.joinPacketIsolation.enable();
+        } else {
+            this.getLogger().info("ProtocolLib absent: join packet isolation disabled.");
+        }
         this.stashModule = new StashModule(this);
         this.stashModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.stashModule, (Plugin)this);
@@ -260,6 +272,7 @@ implements Listener {
         this.kelpGrowthModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.kelpGrowthModule, (Plugin)this);
         this.staffMonitorModule = new StaffMonitorModule(this);
+        this.staffMonitorModule.setStaffPredicate(p -> STAFF_ROLES.contains(this.group(p)));
         this.staffMonitorModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.staffMonitorModule, (Plugin)this);
         this.chatGuardModule = new ChatGuardModule(this);
@@ -267,21 +280,14 @@ implements Listener {
         // Anti-ad pipeline: layer 2 and layer 3, both the in-process classifier.
         this.antiAdPipeline = new AntiAdPipeline(this);
         this.chatGuardModule.setAntiAd(this.antiAdPipeline);
+        Bukkit.getPluginManager().registerEvents((Listener)this.chatGuardModule, (Plugin)this);
+        // Context-aware anti-ad: 5-layer system with sign/rename/proximity context.
         this.signContextTracker = new SignContextTracker();
         this.renameContextTracker = new RenameContextTracker();
         this.contextAwareAntiAd = new ContextAwareAntiAd(this.antiAdPipeline, this.signContextTracker, this.renameContextTracker);
         this.chatGuardModule.setContextAwareAntiAd(this.contextAwareAntiAd);
         Bukkit.getPluginManager().registerEvents((Listener)this.signContextTracker, (Plugin)this);
         Bukkit.getPluginManager().registerEvents((Listener)this.renameContextTracker, (Plugin)this);
-        // Staff flag-review queue: every advertising block lands here with who,
-        // what, and the model percentage; executive+ adjudicate false positives.
-        this.flagReviewStore = new FlagReviewStore();
-        this.chatGuardModule.setFlagReviews(this.flagReviewStore);
-        this.reviewGui = new ReviewGui(this, this.flagReviewStore, this.antiAdPipeline,
-                this.chatGuardModule, this::isExecutivePlus);
-        this.reviewGui.enable();
-        Bukkit.getPluginManager().registerEvents((Listener)this.reviewGui, (Plugin)this);
-        Bukkit.getPluginManager().registerEvents((Listener)this.chatGuardModule, (Plugin)this);
         this.activeRankModule = new ActiveRankModule(this);
         this.activeRankModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.activeRankModule, (Plugin)this);
@@ -299,6 +305,8 @@ implements Listener {
         // IntegratedCoreModuleX binds /playerwipe to its own broken menu during
         // register(). Take the command back for the rebuilt one.
         rebind("playerwipe");
+        // /sus is dispatched from onCommand above, so it needs the same rebind
+        // or the alias target keeps the default executor.
         // Retention: evidence-keep-days had never actually been enforced.
         // Human sign-off. Wired after the guard so it can hand it the queue.
         this.reviewModule = new ReviewModule(this,
@@ -310,16 +318,31 @@ implements Listener {
         this.redeemModule.setCreatorGate(this::isManagerPlus);
         this.rewardsModule = new RewardsModule(this);
         this.rewardsModule.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.rewardsModule, (Plugin)this);
+        // The active-rank threshold reads the same tracked playtime the rewards
+        // GUI shows. Reading the vanilla statistic instead meant the hours never
+        // reached the requirement and the rank was never actually granted.
+        if (this.activeRankModule != null) {
+            this.activeRankModule.playtimeSource(p -> this.rewardsModule.playtimeHours(p));
+        }
         this.antibotGuard = new AntibotGuard(this);
         this.antibotGuard.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.antibotGuard, (Plugin)this);
         this.rewardsModule.setAntibot(this.antibotGuard);
-        this.rewardsGui = new RewardsGui(this.rewardsModule);
-        this.rewardsGui.enable();
-        Bukkit.getPluginManager().registerEvents((Listener)this.rewardsGui, (Plugin)this);
         this.joinRewardModule = new JoinRewardModule(this);
         this.joinRewardModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.joinRewardModule, (Plugin)this);
+        this.rewardsGui = new RewardsGui(this.rewardsModule);
+        this.rewardsGui.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.rewardsGui, (Plugin)this);
+        // Staff flag-review queue: every advertising block lands here with who,
+        // what, and the model percentage; executive+ adjudicate false positives.
+        this.flagReviewStore = new FlagReviewStore();
+        this.chatGuardModule.setFlagReviews(this.flagReviewStore);
+        this.reviewGui = new ReviewGui(this, this.flagReviewStore, this.antiAdPipeline,
+                this.chatGuardModule, this::isExecutivePlus);
+        this.reviewGui.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.reviewGui, (Plugin)this);
         // Chunk entity cap, minecart refund and machine-launch refusal. Silent
         // to players by design; staff alerts go to the console.
         this.entityLimitModule = new EntityLimitModule(this);
@@ -331,7 +354,58 @@ implements Listener {
                 this.chatGuardModule,
                 null, this.playerWipeModule, this.activeRankModule);
         Bukkit.getPluginManager().registerEvents((Listener)this.diagnosticsModule, (Plugin)this);
+        // Self-contained vanish integration. Posts a leave/join message on
+        // vanish and unvanish without depending on any join-message plugin.
+        this.vanishAnnouncer = new com.gildedmc.core.modules.VanishAnnouncer(this,
+                new com.gildedmc.core.modules.VanishAnnouncer.RankContext() {
+                    @Override
+                    public String prefix(Player player) {
+                        return GildedCorePlugin.this.prefix(player);
+                    }
+
+                    @Override
+                    public boolean isRanked(Player player) {
+                        String group = GildedCorePlugin.this.group(player);
+                        return group != null && !group.equals("default");
+                    }
+                });
+        this.vanishAnnouncer.enable();
+        setupPlayerPicker();
     }
+
+    /**
+     * The shared player picker.
+     *
+     * <p>Any command that needs a username opens this instead of printing a
+     * usage line: online players first, then recently departed, with a written
+     * book for entering any other name.
+     */
+    private void setupPlayerPicker() {
+        try {
+            this.recentPlayers = new com.gildedmc.core.ui.RecentPlayerTracker();
+            this.recentPlayers.configure(
+                    this.getConfig().getInt("player-picker.recent-window-seconds", 900),
+                    this.getConfig().getInt("player-picker.recent-max", 200));
+            this.playerPicker = new com.gildedmc.core.ui.PlayerPicker(this, this.recentPlayers,
+                    this.getConfig().getString("player-picker.title", "&8Choose a player"));
+            this.playerTargetGate = new com.gildedmc.core.ui.PlayerTargetGate(this.playerPicker,
+                    rebuilt -> {
+                        org.bukkit.command.Command command = this.getCommand(this.lastCommandName);
+                        if (command == null) command = this.getCommand(this.lastCommandLabel);
+                        if (command == null) {
+                            this.lastCommandSender.sendMessage("§cCould not re-run that command.");
+                            return false;
+                        }
+                        return this.onCommand(this.lastCommandSender, command,
+                                this.lastCommandLabel, rebuilt);
+                    });
+            Bukkit.getPluginManager().registerEvents((Listener) this.recentPlayers, (Plugin) this);
+            Bukkit.getPluginManager().registerEvents((Listener) this.playerPicker, (Plugin) this);
+        } catch (Throwable t) {
+            this.getLogger().warning("Player picker failed to start: " + t);
+        }
+    }
+
 
     /** /flagreview: staff flag-review queue. Rank gate lives in the GUI. */
     private boolean openFlagReview(CommandSender sender) {
@@ -353,6 +427,19 @@ implements Listener {
         return this.rewardsModule.command(sender, args);
     }
 
+    /**
+     * True when a soft dependency is both present and actually enabled.
+     *
+     * <p>Presence is not enough. A plugin that registers and then fails its own
+     * enable - ProtocolLib 5.5 needs Java 25 and dies on Java 21, for example -
+     * is still returned by {@code getPlugin}, so a null check alone lets the
+     * caller load classes that were never made available and the whole plugin
+     * fails to start for a reason that looks nothing like the real cause.
+     */
+    private static boolean isPluginUsable(String name) {
+        org.bukkit.plugin.Plugin plugin = Bukkit.getPluginManager().getPlugin(name);
+        return plugin != null && plugin.isEnabled();
+    }
     /** Points a command declared in plugin.yml back at this plugin's onCommand. */
     private void rebind(String command) {
         try {
@@ -401,6 +488,7 @@ implements Listener {
     }
 
     public void onDisable() {
+        if (this.vanishAnnouncer != null) this.vanishAnnouncer.close();
         if (this.joinPacketIsolation != null) this.joinPacketIsolation.disable();
         if (this.tipTask != null) {
             this.tipTask.cancel();
@@ -411,31 +499,43 @@ implements Listener {
         if (this.stashModule != null) this.stashModule.disable();
         if (this.kelpGrowthModule != null) this.kelpGrowthModule.disable();
         if (this.staffMonitorModule != null) this.staffMonitorModule.disable();
+        if (this.rewardsGui != null) this.rewardsGui.disable();
+        if (this.reviewGui != null) this.reviewGui.disable();
+        if (this.contextAwareAntiAd != null) this.contextAwareAntiAd.disable();
+        if (this.renameContextTracker != null) this.renameContextTracker.disable();
+        if (this.signContextTracker != null) this.signContextTracker.disable();
         if (this.chatGuardModule != null) this.chatGuardModule.disable();
         if (this.activeRankModule != null) this.activeRankModule.disable();
         if (this.redstoneThrottle != null) this.redstoneThrottle.disable();
         if (this.redstoneUnstaler != null) this.redstoneUnstaler.disable();
         if (this.playerWipeModule != null) this.playerWipeModule.disable();
-        if (this.diagnosticsModule != null) this.diagnosticsModule.disable();
         if (this.reviewModule != null) this.reviewModule.disable();
+        if (this.diagnosticsModule != null) this.diagnosticsModule.disable();
         if (this.rewardsModule != null) this.rewardsModule.disable();
         if (this.antibotGuard != null) this.antibotGuard.disable();
-        if (this.rewardsGui != null) this.rewardsGui.disable();
         if (this.joinRewardModule != null) this.joinRewardModule.disable();
         if (this.entityLimitModule != null) this.entityLimitModule.disable();
         if (this.consoleGuard != null) this.consoleGuard.disable();
         if (this.antiAdPipeline != null) this.antiAdPipeline.disable();
-        if (this.contextAwareAntiAd != null) this.contextAwareAntiAd.disable();
-        if (this.reviewGui != null) this.reviewGui.disable();
-        if (this.renameContextTracker != null) this.renameContextTracker.disable();
-        if (this.signContextTracker != null) this.signContextTracker.disable();
     }
 
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String name;
         name = command.getName().toLowerCase(Locale.ROOT);
         if (!authorise(sender, name)) return true;
+        // Any command needing a username opens the shared picker instead of
+        // printing a usage line. The dispatch context is kept so the chosen
+        // name can be spliced back into the same command.
+        this.lastCommandName = name;
+        this.lastCommandLabel = label;
+        this.lastCommandSender = sender;
+        if (this.playerTargetGate != null && this.playerTargetGate.intercept(sender, name, label, args)) {
+            return true;
+        }
         return switch (name) {
+            // `name` is lowercased at the top of onCommand, and a String switch
+            // is case-sensitive, so this label must be lowercase or /gildedcore
+            // falls through to `return false` and Bukkit prints the usage line.
             case "gildedcore" -> this.reload(sender, args);
             case "announce" -> this.announce(sender, args);
             case "keyall" -> this.keyall(sender, args);
@@ -450,13 +550,12 @@ implements Listener {
             case "announcements" -> this.togglePreference(sender, "announcements", "Announcements");
             case "block", "ignore" -> this.block(sender, label, args);
             case "rtpqueue" -> this.rtpQueue(sender, args);
-            case "billfordadmin" -> this.billFordModule.admin(sender, args);
             case "spawnstash" -> this.stashModule.command(sender, args);
             case "deepslatedecoy" -> this.deepslateDecoyModule.command(sender, args);
             case "staffmonitor", "staffactivity", "staffafk" ->
                     this.staffMonitorModule.command(sender, name, args);
-            case "textguard", "gildedguard" -> this.chatGuardModule.command(sender, args);
-            case "activerank", "gildedactive" -> this.activeRankModule.command(sender, args);
+            case "textguard", "coltguard" -> this.chatGuardModule.command(sender, args);
+            case "activerank", "coltactive" -> this.activeRankModule.command(sender, args);
             case "playerwipe" -> this.playerWipeModule.command(sender, args);
             case "review" -> this.reviewModule.command(sender, args);
             case "flagreview" -> openFlagReview(sender);
@@ -504,14 +603,13 @@ implements Listener {
             Map.entry("promote",          "gildedcore.staffmanager"),
             Map.entry("demote",           "gildedcore.staffmanager"),
             Map.entry("hire",             "gildedcore.staffmanager"),
-            Map.entry("billfordadmin",    "gildedbillford.admin"),
             Map.entry("spawnstash",       "gildedcore.spawnstash"),
             Map.entry("deepslatedecoy",   "gildedcore.deepslatedecoy"),
             Map.entry("staffmonitor",     "staffmonitor.view"),
             Map.entry("staffactivity",    "staffmonitor.view"),
             Map.entry("staffafk",         "staffmonitor.view"),
             Map.entry("textguard",        "gildedcore.chatguard.admin"),
-            Map.entry("gildedguard",      "gildedcore.chatguard.admin"),
+            Map.entry("coltguard",        "gildedcore.chatguard.admin"),
             Map.entry("playerwipe",       "gildedcore.playerwipe"),
             Map.entry("review",           "gildedcore.review"),
             Map.entry("flagreview",       "gildedcore.flagreview"),
@@ -527,7 +625,7 @@ implements Listener {
             Map.entry("rtpqueue",         "gildedcore.rtpqueue"),
             Map.entry("joinmessage",      "gildedcore.joinmessage"),
             Map.entry("activerank",       "gildedcore.activerank"),
-            Map.entry("gildedactive",     "gildedcore.activerank"),
+            Map.entry("coltactive",       "gildedcore.activerank"),
             Map.entry("redeem",           "gildedcore.redeem"),
             Map.entry("ping",             "gildedcore.ping"));
 
@@ -586,7 +684,6 @@ implements Listener {
             if (this.antiAdPipeline != null) this.antiAdPipeline.reload();
             this.loadFiles();
             this.chatLimiterModule.reload();
-            this.billFordModule.reload();
             this.stashModule.reload();
             this.deepslateDecoyModule.reload();
             this.kelpGrowthModule.reload();
@@ -602,7 +699,7 @@ implements Listener {
             sender.sendMessage(this.color("&aGildedCore reloaded."));
             return true;
         }
-        sender.sendMessage(this.color("&e/gildedcore <status|selftest|perms|prune|menu|reload>"));
+        sender.sendMessage(this.color("&e/GildedCore <status|selftest|perms|prune|menu|reload>"));
         return true;
     }
 
@@ -615,11 +712,8 @@ implements Listener {
         String displayPrefix = player == null ? "&#EEBB01&lSERVER&f" : this.prefix(player);
         String rank = player == null ? "default" : this.group(player);
         String titleColor = player == null ? "&#EEBB01" : this.rankColor(rank);
-        if (titleColor.startsWith("&#") && titleColor.length() >= 7) titleColor = titleColor;
-        else if (titleColor.startsWith("&") && titleColor.length() >= 2) titleColor = titleColor;
-        else titleColor = "&#EEBB01";
-        String title = titleColor + "&lANNOUNCEMENT";
-        String actor = player == null ? "GildedMC" : player.getName();
+        String title = (titleColor == null || titleColor.isBlank() ? "&#EEBB01" : titleColor) + "&lANNOUNCEMENT";
+        String actor = player == null ? "GildedCore" : player.getName();
         String border = player == null ? "&#EEBB01&l&m------------------------------&f" : this.gradientBorder(player);
         String msg = String.join((CharSequence)" ", args);
         for (Player online : Bukkit.getOnlinePlayers()) {
@@ -666,7 +760,7 @@ implements Listener {
         }
         String raw = args[0].toLowerCase(java.util.Locale.ROOT).trim();
         if (raw.equals("cpvp") || raw.equals("cpvpneth")) {
-            sender.sendMessage(this.color("&cThat kit is disabled for GildedCore."));
+            sender.sendMessage(this.color("&cThat kit is disabled."));
             return true;
         }
         String kit = this.kitId(args[0]);
@@ -1075,9 +1169,9 @@ implements Listener {
     }
 
     private void openRtpQueueMenu(Player player) {
-        // Same card layout as /offend and /playerwipe, so every GildedCore menu
+        // Same card layout as /playerwipe, so every GildedCore menu
         // reads the same way.
-        Inventory inventory = com.gildedmc.core.modules.UiKit.chest(3, "&8RTP Queue");
+        Inventory inventory = com.gildedmc.core.modules.UiKit.themed(3, "RTP Queue");
         inventory.setItem(11, com.gildedmc.core.modules.UiKit.card(Material.GRASS_BLOCK,
                 "&a&lOVERWORLD QUEUE", "Shared overworld drop",
                 List.of("Everyone in the queue is teleported",
@@ -1092,11 +1186,13 @@ implements Listener {
                         "",
                         "Waiting: " + this.rtpQueue.size() + " player(s)"),
                 null, "to join"));
-        inventory.setItem(22, com.gildedmc.core.modules.UiKit.card(Material.BARRIER,
+        inventory.setItem(13, com.gildedmc.core.modules.UiKit.card(Material.BARRIER,
                 "&c&lLEAVE QUEUE", "Drop out",
                 List.of("Removes you from whichever queue you joined."),
                 null, "to leave"));
-        com.gildedmc.core.modules.UiKit.fill(inventory);
+        com.gildedmc.core.modules.UiKit.framed(inventory,
+                com.gildedmc.core.modules.UiKit.FRAME_EDGE,
+                com.gildedmc.core.modules.UiKit.FRAME_CORNER);
         player.openInventory(inventory);
     }
 
@@ -1249,6 +1345,7 @@ implements Listener {
 
     @EventHandler(priority=EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         Player player = event.getPlayer();
         event.joinMessage(null);
         SchedulerCompat.runLater(this, () -> this.completeJoin(player), 1L);
@@ -1280,6 +1377,7 @@ implements Listener {
 
     @EventHandler
     public void onJoinGateQuit(PlayerQuitEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         if (this.joinPacketIsolation != null) this.joinPacketIsolation.unlock(event.getPlayer());
     }
 
@@ -1379,8 +1477,8 @@ implements Listener {
     }
 
     /**
-     * Manager and above — the gate for creator-code management and the staff
-     * ladder commands. Live LuckPerms primary group, not a permission node.
+     * Manager and above on the Colt ladder — the gate for creator-code
+     * management. Live LuckPerms primary group, not a permission node.
      *
      * <p>Delegates to {@link #MANAGER_PLUS_ROLES} so this and the redeem-code
      * creator gate answer the same way. They used to carry separate copies of
@@ -1485,7 +1583,8 @@ implements Listener {
             case "jrmod", "helper" -> "&#407385";
             case "builder" -> "&#bdf80b";
             case "media" -> "&#F73F9B";
-            case "gilded" -> "&#AFFF00";
+            case "colt" -> "&#EEBB01";
+            case "colt+" -> "&#AFFF00";
             case "titan" -> "&#8600FF";
             case "elite" -> "&#4EB5A5";
             case "champion" -> "&#FF5C5C";
@@ -1497,7 +1596,6 @@ implements Listener {
         if (known != null) return known;
         int h = Math.abs(r.hashCode());
         int hue = h % 360;
-        // HSV to RGB with S=0.85 V=0.95 for vivid but not harsh
         double s = 0.85, v = 0.95;
         double c = v * s;
         double x = c * (1 - Math.abs((hue / 60.0) % 2 - 1));
@@ -1526,7 +1624,8 @@ implements Listener {
             case "builder" -> "BUILDER";
             case "media" -> "MEDIA";
             // Paid ranks
-            case "gilded" -> "COLT+";
+            case "colt" -> "COLT";
+            case "colt+" -> "COLT+";
             case "titan" -> "TITAN";
             case "elite" -> "ELITE";
             case "champion" -> "CHAMPION";
@@ -1537,27 +1636,17 @@ implements Listener {
         };
     }
 
-    private String rankIcon(String rank) {
-        return switch (rank) {
-            case "owner" -> "\u265b";
-            case "co-owner" -> "\u2655";
-            case "partner" -> "\u2727";
-            case "executive" -> "\u2605";
-            case "manager" -> "\u25c6";
-            case "dev", "developer" -> "\u2699";
-            case "sradmin", "admin" -> "\u2605";
-            case "jradmin" -> "\u2726";
-            case "srmod", "mod", "jrmod" -> "\u2694";
-            case "helper" -> "\u2764";
-            case "builder" -> "\u271a";
-            case "media" -> "\u25b6";
-            default -> "\u2726";
-        };
-    }
-
+    /**
+     * The rank name rendered one letter at a time, bold, each letter its own
+     * colour. For the solid-colour ranks this renders identically to a single
+     * colour prefix; for colt+ it lays a green gradient across the letters.
+     *
+     * <p>Matches the purchase-board layout: {@code &#A8B0B8&lK&#A8B0B8&lN...&lT&f}
+     * over the plain name on the line below.
+     */
     private String rankDisplay(String rank) {
         String name = this.rankLabel(rank);
-        if ("gilded".equals(rank)) {
+        if ("colt+".equals(rank) || "coltplus".equals(rank)) {
             String start = "AFFF00"; String end = "00FF0B";
             int[] s = hexToRgb(start); int[] e = hexToRgb(end);
             StringBuilder sb = new StringBuilder();
@@ -1617,10 +1706,8 @@ implements Listener {
     }
 
     private int[] hexToRgb(String hex) {
-        if (hex == null || hex.length() != 6) return new int[]{238, 187, 1};
-        try {
-            return new int[]{Integer.parseInt(hex.substring(0, 2), 16), Integer.parseInt(hex.substring(2, 4), 16), Integer.parseInt(hex.substring(4, 6), 16)};
-        } catch (NumberFormatException e) { return new int[]{238, 187, 1}; }
+        if (hex == null || hex.length() != 6) return new int[]{0, 255, 0};
+        try { return new int[]{Integer.parseInt(hex.substring(0, 2), 16), Integer.parseInt(hex.substring(2, 4), 16), Integer.parseInt(hex.substring(4, 6), 16)}; } catch (NumberFormatException e) { return new int[]{0, 255, 0}; }
     }
 
     private String rgbToHex(int r, int g, int b) {
@@ -1685,6 +1772,24 @@ implements Listener {
             prefix = this.rankDisplay(group);
         }
         return gradientBorder(prefix, fallback);
+    }
+
+    private String rankIcon(String rank) {
+        return switch (rank) {
+            case "owner" -> "\u265b";
+            case "co-owner" -> "\u2655";
+            case "partner" -> "\u2727";
+            case "executive" -> "\u2605";
+            case "manager" -> "\u25c6";
+            case "dev", "developer" -> "\u2699";
+            case "sradmin", "admin" -> "\u2605";
+            case "jradmin" -> "\u2726";
+            case "srmod", "mod", "jrmod" -> "\u2694";
+            case "helper" -> "\u2764";
+            case "builder" -> "\u271a";
+            case "media" -> "\u25b6";
+            default -> "\u2726";
+        };
     }
 
     private String cleanPrefix(String prefix, String fallback) {
@@ -1797,6 +1902,9 @@ implements Listener {
 
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         String name = command.getName().toLowerCase(Locale.ROOT);
+        // `name` is lowercased above and equalsIgnoreCase is used elsewhere in
+        // this method, so this comparison must be lowercase too or tab-completion
+        // for /gildedcore silently returns nothing.
         if (name.equals("gildedcore")) {
             return this.complete(args, this.diagnosticsModule.subCommands());
         }
@@ -1806,7 +1914,7 @@ implements Listener {
         if (name.equals("staffactivity") || name.equals("staffafk")) {
             return Collections.emptyList();
         }
-        if (name.equals("textguard") || name.equals("gildedguard")) {
+        if (name.equals("textguard") || name.equals("coltguard")) {
             if (args.length == 1) {
                 return this.complete(args, List.of("status", "mutes", "unmute", "unmuteip",
                         "history", "test", "reload"));
@@ -1815,17 +1923,11 @@ implements Listener {
             return args.length == 2 && (sub.equals("unmute") || sub.equals("history"))
                     ? this.onlineNames(args[1]) : Collections.emptyList();
         }
-        if (name.equals("activerank") || name.equals("gildedactive")) {
+        if (name.equals("activerank") || name.equals("coltactive")) {
             if (args.length == 1) {
                 return this.complete(args, List.of("check", "grant", "regrant", "reload"));
             }
             return args.length == 2 ? this.onlineNames(args[1]) : Collections.emptyList();
-        }
-        if (name.equals("review")) {
-            return args.length == 1
-                    ? this.complete(args, this.reviewModule.subCommands())
-                    : (args.length == 2 ? this.complete(args, this.reviewModule.openIds())
-                                        : Collections.emptyList());
         }
         if (name.equals("playerwipe")) {
             return args.length == 1 ? this.onlineNames(args[0]) : Collections.emptyList();
@@ -1836,23 +1938,22 @@ implements Listener {
         if (name.equals("joinalerts") || name.equals("announcements")) {
             return Collections.emptyList();
         }
-        if (name.equals("rewards") || name.equals("dailyrewards") || name.equals("playtimerewards")) {
-            return args.length == 1 ? this.complete(args, List.of("daily", "playtime", "claimall", "status", "reload", "ban", "pardon")) : Collections.emptyList();
-        }
         if (name.equals("redeem")) {
             return Collections.emptyList();
         }
         if (name.equals("redeemcode")) {
             return this.complete(args, this.redeemModule.adminTab(args));
         }
+        if (name.equals("rewards") || name.equals("dailyrewards") || name.equals("playtimerewards")) {
+            return args.length == 1
+                    ? this.complete(args, List.of("daily", "playtime", "claimall", "status", "reload", "ban", "pardon"))
+                    : Collections.emptyList();
+        }
         if (name.equals("rankgive")) {
             return args.length == 1 ? this.onlineNames(args[0]) : (args.length == 2 ? this.complete(args, this.getConfig().getStringList("rankgive.allowed-ranks")) : Collections.emptyList());
         }
-        if (name.equals("gildedclear") || name.equals("gclear")) {
+        if (name.equals("coltclear") || name.equals("gclear") || name.equals("gildedclear")) {
             return this.complete(args, List.of("clear", "status", "reload"));
-        }
-        if (name.equals("billfordadmin")) {
-            return args.length == 1 ? this.complete(args, List.of("open", "reload", "setcost", "setname")) : Collections.emptyList();
         }
         if (name.equals("greset")) {
             return args.length == 1 ? this.complete(args, List.of("code", "economy", "shards", "soulshards", "playerdata", "user", "worlds", "all", "resetall", "reload")) : (args.length == 2 && args[0].equalsIgnoreCase("code") ? this.complete(args, List.of("generate", "new")) : (args.length == 2 ? this.complete(args, List.of("confirm")) : Collections.emptyList()));
@@ -1893,7 +1994,7 @@ implements Listener {
         LinkedHashSet<String> kits = new LinkedHashSet<String>();
         this.addYamlFileNames(kits, new File("plugins/PlayerKits2/kits"), "");
         kits.removeIf(k -> k.equalsIgnoreCase("cpvp") || k.equalsIgnoreCase("cpvpneth"));
-        return kits.isEmpty() ? List.of("Coal", "Gilded") : new ArrayList<String>(kits);
+        return kits.isEmpty() ? List.of("Coal", "Colt") : new ArrayList<String>(kits);
     }
 
     private List<String> availableRewardPurchases() {
@@ -1908,7 +2009,7 @@ implements Listener {
             }
         }
         values.addAll(this.getConfig().getStringList("rewards.extra-purchase-tabs"));
-        return values.isEmpty() ? List.of("coal", "iron", "gold", "lapis", "diamond", "netherite", "gilded") : new ArrayList<String>(values);
+        return values.isEmpty() ? List.of("coal", "iron", "gold", "lapis", "diamond", "netherite", "colt") : new ArrayList<String>(values);
     }
 
     private void addYamlFileNames(Set<String> values, File folder, String suffixToRemove) {
@@ -1973,6 +2074,5 @@ implements Listener {
     }
 
 }
-
 
 

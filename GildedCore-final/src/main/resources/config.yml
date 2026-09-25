@@ -1,11 +1,47 @@
-# Do not edit. GildedCore compares this against the version it ships with and
+# Do not edit. ColtCore compares this against the version it ships with and
 # adds any missing keys on startup, backing your file up to config-backups/
 # first. Your existing values are never changed by that merge.
 #
 # One caveat: deleting a key does not disable it permanently - the next merge
 # will restore it at its default, because a deletion is indistinguishable from
 # a key that was never there. Set it to false or empty instead of deleting it.
-config-version: 42
+config-version: 45
+
+local-ai:
+  # Local-only supervised clean/advertising classifier. No external AI.
+  enabled: true
+  shadow-mode: false
+  labels:
+    - clean
+    - advertising
+  min-samples-per-label: 60
+  min-accuracy: 0.90
+  min-confidence: 0.85
+  clean-sample-rate: 0.05
+  max-samples: 20000
+  model:
+    buckets: 131072
+    dim: 40
+    hidden: 96
+  train:
+    epochs: 80
+    learning-rate: 0.005
+    l2: 0.000001
+    hold-out: 0.2
+    auto-retrain-minutes: 60
+    min-new-samples: 25
+    # Extra model knobs, all wired into NeuralModel.train:
+    #   weight-decay        L2 pull to zero per step. 0 disables.
+    #   grad-clip           absolute gradient ceiling. 0 disables.
+    #   seed                shuffle seed - the same data + seed reproduces a run.
+    #   class-weight-power  0 = no class weighting, 0.5 = sqrt-damped, 1 = full.
+    #   early-stop-patience stop after N epochs without a held-out gain. 0 = off.
+    weight-decay: 0.0
+    grad-clip: 5.0
+    seed: 999
+    class-weight-power: 0.5
+    early-stop-patience: 0
+    label-smoothing: 0.05
 
 tips:
   enabled: true
@@ -43,6 +79,7 @@ staffmanager:
     - sradmin
     - manager
     - executive
+    - dev
     - developer
     - co-owner
     - owner
@@ -82,6 +119,8 @@ rewards:
     - co-owner
     - partner
     - manager
+    - executive
+    - dev
     - developer
     - sradmin
     - admin
@@ -100,7 +139,7 @@ join-alerts:
     - champion
     - elite
     - titan
-    - gilded
+    - colt
     - helper
     - jrmod
     - mod
@@ -108,12 +147,13 @@ join-alerts:
     - jradmin
     - admin
     - sradmin
+    - executive
+    - dev
     - developer
     - manager
     - partner
     - co-owner
     - owner
-
 rankgive:
   command: "lp user %player% parent set %rank%"
   allowed-ranks:
@@ -122,7 +162,7 @@ rankgive:
     - elite
     - titan
     - booster
-    - gilded
+    - colt
 
 spawn:
   world: "Spawn"
@@ -141,6 +181,8 @@ chat-limiter:
       - jradmin
       - admin
       - sradmin
+      - executive
+      - dev
       - developer
       - manager
       - partner
@@ -149,7 +191,7 @@ chat-limiter:
     multipliers:
       elite: 1.35
       titan: 1.7
-      gilded: 2.1
+      colt: 2.1
       helper: 1.5
       jrmod: 2.0
       mod: 2.5
@@ -180,16 +222,43 @@ playerwipe:
   # empty. There must be exactly one.
   enabled: true
 
-  # Access is granted by gildedcore.playerwipe or a case-insensitive name below.
+  # Access is granted by coltcore.playerwipe or a case-insensitive name below.
   allowed-usernames:
     - sonionviro
     - mtyri
+    - jeetu_46
   # Legacy compatibility: a non-blank owner-name is also accepted.
   owner-name: ""
   gui-title: '&8Wipe &8| &f%player%'
 
   # %player% %stat% %value% are substituted.
   stat-command: 'statsmgr set %player% %stat% %value%'
+
+  # Also clear the server's own vanilla playtime statistic when the PLAYTIME or
+  # RESET ALL category runs. This is a different number from every command above:
+  # it lives in the player's vanilla NBT and is what the active-rank check and
+  # external stats viewers read. Bukkit only exposes it for an online player, so
+  # an offline target is queued and cleared on their next login.
+  reset-bukkit-statistics: true
+
+  # When the wipe target is OFFLINE, also store the command set and replay it
+  # when that account next logs in. Most wipe commands need the player online
+  # (statsmgr, /clear) or quietly do nothing otherwise, and every command here
+  # is a reset, so running it twice is harmless. Stored in pending-wipes.yml as
+  # just a UUID, the name, your label and the command lines - no player data.
+  #
+  # Review with /playerwipe pending, drop one with /playerwipe cancel <uuid>.
+  queue-offline-wipes: true
+  # When the target is offline, load them into the server for the single tick
+  # the wipe runs on, then remove them. The server can only write a player's
+  # stored data back through a player object, so this is how an offline account
+  # gets its stats touched without waiting for them to log in. Nothing external
+  # connects and the account is never broadcast to real clients. If the server
+  # internals do not match, this reports unavailable and the queue above is used.
+  offline-synthetic-load: true
+  # Give up on a queued wipe after this many failed attempts so a permanently
+  # broken command cannot sit in the queue forever.
+  queue-max-attempts: 3
 
   # MIRROR EVERY WIPE TO DISCORD.
   #
@@ -264,23 +333,27 @@ playerwipe:
         - mob_kills
         - money_made
         - money_spent
-        - playtime
+        - play_time
     playtime:
       enabled: true
       slot: 14
       icon: CLOCK
-      display-name: '&#EEBB01&lPLAYTIME'
-      description: 'EssentialsX playtime'
+      display-name: '&#00ff00&lPLAYTIME'
+      description: 'Tracked playtime and its reward claims'
       information:
-        - 'Resets the playtime EssentialsX has recorded.'
-        - 'Note: this also resets progress towards the active rank.'
+        - 'Zeroes the playtime this plugin tracks for rewards,'
+        - 'and re-locks every playtime reward that was claimed.'
+        - ''
+        - 'The EssentialsX line is separate and only runs if you'
+        - 'actually run EssentialsX. Delete it otherwise.'
       warning: 'This cannot be undone.'
       all-commands:
+        - 'rewards resetplaytime %uuid%'
         - 'essentials:playtime reset %player%'
 
     inventory:
       enabled: true
-      slot: 15
+      slot: 20
       icon: CHEST
       display-name: '&f&lINVENTORY'
       description: 'Everything they are carrying'
@@ -295,7 +368,7 @@ playerwipe:
 
     enderchest:
       enabled: true
-      slot: 16
+      slot: 21
       icon: ENDER_CHEST
       display-name: '&5&lENDER CHEST'
       description: 'Ender chest and AxVaults'
@@ -363,6 +436,8 @@ playerwipe:
       - keys
       - playtime
       - homes
+      - inventory
+      - enderchest
     # Anything extra to run after the categories.
     all-commands: []
 
@@ -374,9 +449,6 @@ creative-guard:
   messages:
     blocked: "&cCreative item spawning is owner-only."
     notify: "&fBlocked &e%player% &ffrom %action% creative item &e%item%&f."
-
-
-
 
 lagguard:
   enabled: true
@@ -417,7 +489,7 @@ lagguard:
     items-per-transfer: 64
     # Hard cap per source hopper. This implementation never allows above 64/sec.
     items-per-second: 64
-    # Prevents GildedCore bulk hopper logic from touching vanilla crafters, so disabled crafting slots stay disabled.
+    # Prevents ColtCore bulk hopper logic from touching vanilla crafters, so disabled crafting slots stay disabled.
     preserve-crafter-disabled-slots: true
     bulk-transfer:
       enabled: true
@@ -456,7 +528,6 @@ lagguard:
     audit-log: true
     audit-every-cancelled-event: false
     per-chunk-cooldown-ms: 60000
-
 
   # Superseded by lagguard.entity-limit below, kept for reference only.
   # The dedicated minecart limiter was retired: the unified entity limit owns
@@ -545,12 +616,11 @@ lagguard:
       # The cart comes back in the player's inventory SILENTLY - no message.
       refund: true
 
-
 # Integrated smart tips. Context-aware tips look at recent chat topics and prefer useful matching tips.
 smart-tips:
   enabled: true
   interval-seconds: 180
-  prefix: "&#EEBB01ᴛɪᴘ » &f"
+  prefix: "&#00ff00á´›Éªá´˜ Â» &f"
   disabled-players: []
   context:
     enabled: true
@@ -582,7 +652,7 @@ smart-tips:
     trade:
       - "Use the trade GUI for deals. Dropping items is risky and may be cleared by clearlag."
     staff:
-      - "Use reports and staff tools properly. GildedGrim alerts and replays help staff review suspicious PvP."
+      - "Use reports and staff tools properly. Grim alerts and replays help staff review suspicious PvP."
     security:
       - "Never share your password. If you suspect a compromised account, ask staff to unregister/reset it safely."
     replay:
@@ -596,15 +666,14 @@ smart-tips:
 
 # Integrated smart redstone guard. It disables noisy redstone by block, chunk, or 32x32-chunk region.
 
-
 stash:
   # Discord webhook for stash alerts. Blank disables webhook alerts.
   # Treat this URL as a secret - anyone holding it can post to your staff channel.
   webhook-url: ""
-  webhook-username: "GildedCore Anti-Cheat"
-  # Who receives in-game alerts. Holders of gildedcore.spawnstash are never
+  webhook-username: "ColtCore Anti-Cheat"
+  # Who receives in-game alerts. Holders of coltcore.spawnstash are never
   # flagged by their own traps.
-  alert-permission: "gildedcore.spawnstash"
+  alert-permission: "coltcore.spawnstash"
   # Cancel the block break so the stash stays intact for the next visitor.
   cancel-breaks: true
   # Refuses to place a stash somewhere a player could see it without X-ray,
@@ -764,6 +833,9 @@ chat-guard:
   # The text guard. Covers chat, signs, written books and anvil item renames.
   # Regex and bypass normalisation run first, then the in-process local model.
   enabled: true
+  context:
+    enabled: true
+    log-drops: false
   # REMOVE the offending text, and punish nobody for advertising.
   # Chat is cancelled before anyone sees it and an anvil rename is refused. A
   # sign's bad line is cleared and the sign still places; a book's bad line is
@@ -827,7 +899,7 @@ chat-guard:
     # Removed from the model: it measured 89.2% precision, the worst of any
     # class, and it failed towards accusing ordinary blunt chat. Harassment is
     # defined by intent and repetition, and a classifier looking at one message
-    # can see neither. Staff have the history in /offend; the model does not.
+    # can see neither. Staff have the history; the model does not.
     harassment:
       - 'STAFF-ONLY'
 
@@ -836,11 +908,11 @@ chat-guard:
     light-advertising:
       - 'WARN'
       - 'WARN'
-      - 'BAN 1d'
-      - 'BAN 3d'
-      - 'BAN 7d'
-      - 'BAN 28d'
-      - 'IPBAN permanent'
+      - 'MUTE 1d'
+      - 'MUTE 3d'
+      - 'MUTE 7d'
+      - 'MUTE 28d'
+      - 'IPMUTE permanent'
 
     # Ordinary swearing from the built-in lexicon. NOT hate speech - routing
     # every lexicon hit to the hate ladder would mean a one-day mute for saying
@@ -854,17 +926,19 @@ chat-guard:
       - 'BAN 28d'
       - 'IPBAN permanent'
 
+    # NOT softened. Posting an address or invite is never accidental and it is
+    # the one offence that costs the server players directly, so the second
+    # offence is still the last one.
     # Heavy advertising - an actual address. One offence, no warning rung.
     # Never accidental, and it is the offence that costs the server players.
-    # Advertising in CHAT gets this ladder.
     advertising:
       - 'WARN'
       - 'WARN'
-      - 'BAN 1d'
-      - 'BAN 3d'
-      - 'BAN 7d'
-      - 'BAN 28d'
-      - 'IPBAN permanent'
+      - 'MUTE 1d'
+      - 'MUTE 3d'
+      - 'MUTE 7d'
+      - 'MUTE 28d'
+      - 'IPMUTE permanent'
 
     # ADVERTISING ON SIGNS - Immediate permanent IP ban.
     # Signs are permanent and visible to all players. Advertising on a sign
@@ -884,7 +958,7 @@ chat-guard:
     # detector flagged "bob@gmail.com is my email" as doxxing - that is now
     # fixed, but it is exactly the class of mistake that must not be automatic.
     #
-    # Staff apply it by hand through /offend.
+    # Staff apply it by hand.
     doxxing:
       - 'STAFF-ONLY'
 
@@ -958,31 +1032,6 @@ chat-guard:
     - shiitake
     - therapist
 
-  # CONTEXT AWARENESS for the local model.
-  #
-  # The classifier is a bag of character n-grams. It is good at "this resembles
-  # the offences I was trained on" and has no idea whether the thing it is
-  # alleging is actually present. Measured on real server chat it scored
-  # "imma leave" as hate at 100% and "i would be mad to" as hate at 100%, and
-  # both were muted, because a verdict was being treated as a decision.
-  #
-  # With this on, a model verdict must be corroborated by something checkable:
-  #   advertising  -> an address is in the message
-  #   hate         -> a slur is present, spelled or sounded
-  #   nsfw         -> a sexual term is present
-  #
-  # When the top two labels are close it also asks "is it X or Y" and picks
-  # whichever one the message actually supports.
-  #
-  # An uncorroborated verdict is NOT treated as innocent - novel phrasing is
-  # what the model is for. If it is confident it goes to staff as a REVIEW
-  # alert with no punishment attached, so nobody is muted for a sentence in
-  # which nothing prohibited appears and nothing suspicious is silently lost.
-  context:
-    enabled: true
-    # Log the verdicts dropped for lack of evidence. Useful for a week.
-    log-drops: false
-
   phonetic:
     enabled: true
 
@@ -1005,7 +1054,7 @@ chat-guard:
     # collides with a term.
     allow: []
 
-  # Mutes are enforced by GildedCore itself - it does not need a punishment
+  # Mutes are enforced by ColtCore itself - it does not need a punishment
   # plugin to exist. If you also want your punishment plugin to keep its own
   # record, put a command here and it runs alongside. %player% %duration%
   # %reason% %ip% are substituted. Leave blank to run nothing.
@@ -1049,12 +1098,14 @@ chat-guard:
     # Leave it empty. Put entries here only to NARROW detection deliberately.
     tlds: []
     # Your own addresses. Telling someone the server IP is not advertising.
-    # Operator-provided mapping, EXCLUSIVE: play/store/discord.gildedmc.pro.
-    # Bare gildedmc.pro and gildedmc.net are NOT allowed and will block.
+    # Operator-provided mapping: coltcore.dpdns.org, *.coltmc.bond,
+    # *.coltmc.dpdns.org, *.coltmc.gildedmc.pro. Suffix matching covers
+    # play/discord/store subdomains. Nothing else is allowlisted.
     allow:
-      - play.gildedmc.pro
-      - store.gildedmc.pro
-      - discord.gildedmc.pro
+      - coltcore.dpdns.org
+      - coltmc.bond
+      - coltmc.dpdns.org
+      - coltmc.gildedmc.pro
     # Skip IPv4 matches shaped like a Minecraft version ("1.21.4.1").
     ignore-version-like: true
 
@@ -1092,39 +1143,41 @@ active-rank:
   extra-commands: []
 
   announce: true
-  announce-message: '&8[&#EEBB01Active&8] &e%player% &7hit &#EEBB01%hours%h &7played and earned the &#EEBB01ACTIVE &7rank!'
-  player-message: '&aYou have played &f%hours%h &aand earned the &#EEBB01ACTIVE &arank.'
+  announce-message: '&8[&#00ff00Active&8] &e%player% &7hit &#00ff00%hours%h &7played and earned the &#00ff00ACTIVE &7rank!'
+  player-message: '&aYou have played &f%hours%h &aand earned the &#00ff00ACTIVE &arank.'
 
   # How often online players are re-checked, so someone crossing the line
   # mid-session does not have to relog.
   check-interval-seconds: 300
 
+vanish-announce:
+  # Posts a message when a staff member vanishes or unvanishes. Implemented
+  # inside this plugin: it hooks EssentialsX and SuperVanish/PremiumVanish
+  # toggle events directly and falls back to metadata sampling for providers
+  # that publish no event (StaffSuite, SayanVanish, AdvancedVanish, CMI,
+  # VanishNoPacket). No join-message plugin is required.
+  enabled: true
 
-  # How far the nearby picker looks.
-  nearby-radius: 32
+  # Sent to everyone when a player vanishes.
+  leave-message: '&c[-] &f%player%'
 
-  # How far back violations are counted, in days. 0 = forever.
-  #
-  # VIOLATIONS ARE COUNTED PER ADDRESS, NOT PER ACCOUNT. A new alt does not get
-  # a fresh ladder - that is the whole point of counting this way.
-  violation-window-days: 0
+  # Sent to everyone when a player unvanishes on the default rank.
+  join-message: '&c[+] &f%player%'
 
-  gui-title: '&8Punishing &8| &f%player%'
+  # Sent when a ranked player unvanishes, instead of join-message. The [+] is
+  # deliberately omitted: the prefix already reads as the arrival notice, and
+  # printing both used to show the name twice. Use a real newline for a
+  # second line.
+  ranked-join-message: '%rank%%player%\n&7Has joined!'
 
-  # Shown on the kick screen and to anyone a ban stops at login.
-  ban-screen: |-
-    &c&lYou are banned
+  # Semicolon-separated. Everyone who passes at least one of these sees the
+  # ranked-join-message. Leave empty to show it to ranked players only.
+  ranked-viewers: ''
 
-    &7Reason: &f%reason%
-    &7Expires: &f%remaining%
-
-  # Optional: run your existing punishment plugin alongside the built-in
-  # enforcement, so its own records stay in sync. Blank = run nothing.
-  # %player% %duration% %reason% %staff% %ip% are substituted.
-  console-commands:
-    WARN: ''
-    MUTE: ''
-    BAN: ''
+  # Metadata fallback sample period, in ticks. Only used for providers with
+  # no toggle event we can hook. 20 ticks is one second; lower is smoother but
+  # costs more. Event-hooked providers ignore this.
+  poll-ticks: 20
 
 staff-macro:
   # Catches STAFF who are AFK-farming, macroing or auto-clicking.
@@ -1154,6 +1207,9 @@ staff-macro:
     - admin
     - sradmin
     - manager
+    - executive
+    - dev
+    - developer
     - co-owner
     - owner
 
@@ -1245,17 +1301,21 @@ staff-macro:
 punishments:
   # Where mutes and bans actually land.
   #
-  #   auto      use LiteBans if it is installed, otherwise enforce internally
+  #   auto      use LiteBans if installed, else any detected ban plugin, else internal
   #   litebans  always dispatch LiteBans commands
-  #   internal  always enforce with GildedCore's own store (textguard.db)
+  #   external  always dispatch external commands (Essentials, AdvancedBan, BanManager, etc.)
+  #             set templates under punishments.external to match your plugin
+  #   commands  alias for external
+  #   vanilla   alias for external (vanilla /ban)
+  #   internal  always enforce with ColtCore's own store (textguard.db)
   #
   # With LiteBans in charge, every mute and ban this plugin decides on is issued
   # as a LiteBans command, so it appears in /history and /checkban exactly like
   # one a staff member typed by hand, and LiteBans owns the enforcement and the
-  # ban screen. GildedCore stops cancelling chat itself so nobody gets two mute
+  # ban screen. ColtCore stops cancelling chat itself so nobody gets two mute
   # messages for one message they typed.
   #
-  # What stays with GildedCore either way: the offence ledger. LiteBans counts
+  # What stays with ColtCore either way: the offence ledger. LiteBans counts
   # per account; the ladder here escalates per ADDRESS and per reason, which
   # LiteBans has no concept of.
   backend: auto
@@ -1276,7 +1336,21 @@ punishments:
     IPBAN-PERMANENT: 'ipban %player% %reason%'
     UNMUTE: 'unmute %player%'
     UNBAN: 'unban %player%'
-
+  external:
+    # EssentialsX-compatible templates. Adjust if your ban plugin uses different syntax.
+    # %player% %duration% %reason% %staff% %ip% - %duration% is like 1d, 7d, 1w or empty for permanent.
+    WARN: 'warn %player% %reason%'
+    MUTE: 'tempmute %player% %duration% %reason%'
+    MUTE-PERMANENT: 'mute %player% %reason%'
+    IPMUTE: 'tempmute %player% %duration% %reason%'
+    IPMUTE-PERMANENT: 'mute %player% %reason%'
+    BAN: 'tempban %player% %duration% %reason%'
+    BAN-PERMANENT: 'ban %player% %reason%'
+    IPBAN: 'tempbanip %player% %duration% %reason%'
+    IPBAN-PERMANENT: 'banip %player% %reason%'
+    UNMUTE: 'unmute %player%'
+    UNBAN: 'unban %player%'
+    UNBANIP: 'unbanip %player%'
 
   # How often the sweep runs. It also runs once a minute after startup, so a
   # server that restarts often still prunes.
@@ -1299,125 +1373,6 @@ punishments:
   #   ips           tiny, and they are what links alts
   #   staffmonitor  prunes itself on its own keep-days schedule
 
-local-ai:
-  # Local-only supervised clean/advertising classifier. No external AI.
-  enabled: true
-
-  # LOGS ONLY. Leave this on until the numbers below look right to you; the
-  # model still learns and still reports what it would have done.
-  # Toggle in game with /textguard model shadow.
-  #
-  # OFF, because the model now ships pre-trained and measured, and because the
-  # review queue is enabled - an admin approves anything it proposes before a
-  # punishment lands. Set it back to true if you would rather watch first.
-  shadow-mode: false
-
-  labels:
-    - clean
-    - advertising
-
-  # SHIPS PRE-TRAINED. A few hundred built-in examples per category are loaded
-  # on first start and the model is fitted immediately, so it is useful on day
-  # one rather than after weeks of accumulating incidents.
-  #
-  # No slurs are shipped in the jar - that is a liability, and the vocabulary
-  # that matters is community specific anyway. The built-in hate examples are
-  # STRUCTURAL ("you are a %s", "all of them are %s") and the slot is filled
-  # from your own chat-guard.terms at load time. Leave that list empty and no
-  # hate examples are generated at all, rather than seeding nonsense.
-  #
-  # ALSO trains on your own moderation history: Every
-  # regex hit and every staff correction is a labelled
-  # example, and ordinary messages are sampled as 'clean'. Nothing is
-  # downloaded, and the model ends up fitted to how THIS server talks.
-  #
-  # It never trains on its own predictions. That is how a classifier quietly
-  # convinces itself: it would relabel its own mistakes as ground truth.
-
-  # It must earn its place. Until there are this many examples of EVERY label
-  # and the held-out accuracy clears min-accuracy, it does nothing at all.
-  # MODEL GEOMETRY.
-  #
-  # Sized by measurement, not ambition. Swept across five random splits on the
-  # 2,540-example corpus:
-  #
-  #   2^16 x 32  x 64     2 MB    mean 96.5%   worst 95.5%   <- default
-  #   2^18 x 64  x 128   16 MB    mean 95.9%   worst 93.9%
-  #   2^19 x 96  x 192   48 MB    mean 93.7%   worst 87.6%
-  #   2^20 x 128 x 256  128 MB    mean 92.8%   worst 90.9%
-  #
-  # Bigger is worse AND less stable: capacity with too little data to constrain
-  # it memorises the majority classes. A single split once showed 2^19 at 97.6%,
-  # which is why five splits are run and not one - that was noise.
-  #
-  # This is not a permanent ceiling. Every reviewed punishment adds a
-  # gold-standard example, and once the corpus is several times larger the
-  # bigger geometries should overtake. Re-run the sweep before raising it.
-  #
-  # buckets MUST be a power of two - the forward pass masks instead of dividing.
-  # Inference cost does not scale with bucket count; only memory does.
-  model:
-    buckets: 131072
-    dim: 40
-    hidden: 96
-
-  min-samples-per-label: 60
-  # Held-out accuracy needed before the model is trusted. Treat this as a floor,
-  # not a grade: the split is random over your own samples, and chat repeats
-  # itself, so the number reads optimistically high. Shadow mode and the
-  # confidence gate below are the real safeguards.
-  min-accuracy: 0.90
-
-  # Act only at or above this confidence.
-  #
-  # MEASURED, on chat the model had never seen: recall was flat at roughly 25%
-  # from a gate of 0.50 all the way to 0.85, with ZERO false positives at every
-  # one of them. Since a higher gate costs almost no recall and buys margin,
-  # 0.85 is the default. Above 0.95 it stops firing entirely.
-  min-confidence: 0.85
-  # Share of ordinary, unremarkable messages kept as negative examples. Without
-  # negatives a classifier learns that everything is an offence.
-  clean-sample-rate: 0.05
-
-  # Oldest examples of the largest class are dropped past this.
-  max-samples: 20000
-
-  train:
-    # Chosen by sweep, scored on what matters - how many real offences it acts
-    # on at the gate with zero false positives, on wording it had never seen:
-    #
-    #   epochs  lr      acts/16   false positives
-    #   20      0.005   14        0
-    #   40      0.005   14        0
-    #   80      0.005   15        0     <- shipped
-    #   80      0.010   12        0
-    #   80      0.050    2        0
-    #
-    # A higher rate collapses it: at 0.05 it acts on almost nothing.
-    epochs: 80
-    learning-rate: 0.005
-    l2: 0.000001
-    # Fraction held back to measure on. The split is deterministic, so
-    # retraining the same data reports the same number.
-    hold-out: 0.2
-    auto-retrain-minutes: 60
-    min-new-samples: 25
-    # Extra model knobs, all wired into NeuralModel.train:
-    #   weight-decay        L2 pull to zero per step. 0 disables.
-    #   grad-clip           absolute gradient ceiling. 0 disables.
-    #   seed                shuffle seed - the same data + seed reproduces a run.
-    #   class-weight-power  0 = no class weighting, 0.5 = sqrt-damped (old
-    #                       behaviour), 1 = full inverse frequency.
-    #   early-stop-patience stop after N epochs without a held-out gain. 0 = off.
-    weight-decay: 0.0
-    grad-clip: 5.0
-    seed: 999
-    class-weight-power: 0.5
-    early-stop-patience: 0
-    # Softens the one-hot target. Fights the overconfidence that made the old
-    # model shout "hate 100%" at opinions. 0.05 is a good default.
-    label-smoothing: 0.05
-
 languages:
   # Multi-language support.
   #
@@ -1432,7 +1387,7 @@ languages:
   # Korean or Greek became an EMPTY STRING. Not degraded - empty. Twenty-nine of
   # the thirty most spoken languages produced no features and matched no terms.
   # Separately, the lookalike table that unmasks Cyrillic glyphs hidden inside
-  # English was corrupting genuine Russian: "ты идиот" came out as "t...ot".
+  # English was corrupting genuine Russian: "Ñ‚Ñ‹ Ð¸Ð´Ð¸Ð¾Ñ‚" came out as "t...ot".
   # Both are fixed; the table now only runs on dominantly Latin text.
 
   # Verified working end to end, term matching included:
@@ -1450,7 +1405,7 @@ languages:
   # Romanised variants need no special handling: Hinglish and Arabizi are Latin
   # script, so they are tokenised normally. Arabizi digits are handled by
   # emitting both the raw and the leet-folded character runs as features - in
-  # leetspeak 3 is an e, in Arabizi 3 is ع, and rather than pick a winner both
+  # leetspeak 3 is an e, in Arabizi 3 is Ø¹, and rather than pick a winner both
   # readings are fed to the model, which learns which one predicts what.
 
   # Extra phrases for the structural detectors, in ANY language or script.
@@ -1458,72 +1413,17 @@ languages:
   # responsibly and verified. Each entry is compiled bypass-tolerant and
   # normalised exactly like the English ones.
   death-threat-phrases: []
-    # - 'خليك تموت'
-    # - 'मर जा'
-    # - '去死吧'
+    # - 'Ø®Ù„ÙŠÙƒ ØªÙ…ÙˆØª'
+    # - 'à¤®à¤° à¤œà¤¾'
+    # - 'åŽ»æ­»å§'
 
   spam-incite-phrases: []
-    # - 'सब स्पैम करो'
-    # - '大家刷屏'
+    # - 'à¤¸à¤¬ à¤¸à¥à¤ªà¥ˆà¤® à¤•à¤°à¥‹'
+    # - 'å¤§å®¶åˆ·å±'
 
   # The hate/slur term list itself stays in chat-guard.terms, which accepts any
   # script. One list, any mix of languages - the compiler normalises each entry
   # into the same space as the message it is tested against.
-
-review:
-  # Human sign-off on automated punishments, and the training loop it feeds.
-  #
-  # When a detection fires and an eligible reviewer is online, the punishment is
-  # HELD and offered to them as a clickable approve/deny prompt. Their answer
-  # decides what happens - and is recorded as a training example with the best
-  # label the system can get: a human who read the actual message in context.
-  #
-  # This is what makes training work. The classifier's weak axis was never
-  # precision, it was recall, because it only ever saw as much varied labelled
-  # data as the server happened to produce. Every review adds one more, and a
-  # DENY is worth more than an approve: false positives are exactly what a model
-  # trained only on its own successes never learns to avoid.
-  #
-  # ENABLED. Give admins the node or nothing will ever be reviewed:
-  #   lp group admin permission set gildedcore.review
-  # With no eligible reviewer online, no-reviewer below decides - and the
-  # default keeps the old behaviour rather than quietly letting things through.
-  enabled: true
-
-  # WHO CAN REVIEW: holders of gildedcore.review - meant for admin and above -
-  # who are NOT currently flagged AFK by staff-macro. Someone whose input is a
-  # machine loop is by definition not reading chat; handing them the queue would
-  # either stall it or harvest a rubber stamp from a macro. They are told to
-  # answer their AFK check first.
-  #
-  # Give the node: lp group admin permission set gildedcore.review
-
-  # How long a decision waits before the fallback takes over. Nothing waits
-  # forever, or an unanswered queue becomes a silent amnesty.
-  timeout-seconds: 120
-
-  # What happens when NO eligible reviewer is online, or the timeout expires:
-  #   APPLY     punish exactly as it would without this module (default)
-  #   DROP      punish nobody
-  #   ESCALATE  punish nobody, but alert staff so a human sees it later
-  no-reviewer: APPLY
-
-  # Categories held for a human. Use '*' for everything.
-  #
-  # The defaults hold back the judgement calls and let the unambiguous
-  # structural detections through: an email address or a phone number in chat
-  # is not a matter of opinion, and waiting two minutes to remove it is worse
-  # than removing it now. Add 'doxxing' or 'death-threat' here if you would
-  # rather a human confirmed even those.
-  categories:
-    - hate
-    - harassment
-    - advertising
-    - spam-incite
-
-  # Safety valve: past this many waiting reviews, punishments apply without
-  # review rather than queueing without limit.
-  max-pending: 20
 
 console-guard:
   # Screens the server's own console output with the same rules as chat.
@@ -1582,7 +1482,7 @@ redstone:
   # expensive than the throttle saves.
   sample-ticks: 20
 
-  # gildedcore.redstone.exempt holders are never throttled.
+  # coltcore.redstone.exempt holders are never throttled.
 
 redstone-unstaler:
   # Every 3 seconds this walks ONLY the redstone blocks that recently carried
@@ -1609,31 +1509,78 @@ redstone-unstaler:
   # Log every fixed block. Off by default; enable when investigating a farm.
   log-repairs: false
 
+review:
+  # Human sign-off on automated punishments, and the training loop it feeds.
+  #
+  # When a detection fires and an eligible reviewer is online, the punishment is
+  # HELD and offered to them as a clickable approve/deny prompt. Their answer
+  # decides what happens - and is recorded as a training example with the best
+  # label the system can get: a human who read the actual message in context.
+  #
+  # This is what makes training work. The classifier's weak axis was never
+  # precision, it was recall, because it only ever saw as much varied labelled
+  # data as the server happened to produce. Every review adds one more, and a
+  # DENY is worth more than an approve: false positives are exactly what a model
+  # trained only on its own successes never learns to avoid.
+  #
+  # ENABLED. Give admins the node or nothing will ever be reviewed:
+  #   lp group admin permission set coltcore.review
+  # With no eligible reviewer online, no-reviewer below decides - and the
+  # default keeps the old behaviour rather than quietly letting things through.
+  enabled: true
 
-  # Per player, not per check. One analysis covers whatever they are doing.
-  cooldown-seconds: 300
+  # WHO CAN REVIEW: holders of coltcore.review - meant for admin and above -
+  # who are NOT currently flagged AFK by staff-macro. Someone whose input is a
+  # machine loop is by definition not reading chat; handing them the queue would
+  # either stall it or harvest a rubber stamp from a macro. They are told to
+  # answer their AFK check first.
+  #
+  # Give the node: lp group admin permission set coltcore.review
 
-  # A single flag stays quiet. Grim's own buffers already tolerate one.
-  min-flags: 2
+  # How long a decision waits before the fallback takes over. Nothing waits
+  # forever, or an unanswered queue becomes a silent amnesty.
+  timeout-seconds: 120
 
+  # What happens when NO eligible reviewer is online, or the timeout expires:
+  #   APPLY     punish exactly as it would without this module (default)
+  #   DROP      punish nobody
+  #   ESCALATE  punish nobody, but alert staff so a human sees it later
+  no-reviewer: APPLY
 
-  # Where a check starts before anyone has judged it. 0.5 = believed enough to
-  # report, not enough to be certain.
-  starting-weight: 0.5
+  # Categories held for a human. Use '*' for everything.
+  #
+  # The defaults hold back the judgement calls and let the unambiguous
+  # structural detections through: an email address or a phone number in chat
+  # is not a matter of opinion, and waiting two minutes to remove it is worse
+  # than removing it now. Add 'doxxing' or 'death-threat' here if you would
+  # rather a human confirmed even those.
+  categories:
+    - hate
+    - harassment
+    - advertising
+    - spam-incite
 
-  # Below this many decisions the measured ratio is ignored and the starting
-  # weight is used. Two confirmations is 100% and means nothing.
-  min-decisions: 5
+  # Safety valve: past this many waiting reviews, punishments apply without
+  # review rather than queueing without limit.
+  max-pending: 20
 
-# ------------------------------------------------------------------
-# Claimable rewards
-# ------------------------------------------------------------------
-# /rewards daily claims one reward per calendar day. A missed calendar day
-# resets the streak. The entry with the highest `day` at or below the current
-# streak is used, so day-7 continues to be the reward after day seven.
 daily-rewards:
+  # Once per calendar day, in this timezone. A missed day resets the streak to
+  # one, so this is a consecutive-day streak rather than a running total.
   enabled: true
   timezone: 'UTC'
+  # A calendar day only counts once the player has been online this long on it.
+  # Someone who joins and leaves straight away earns nothing and cannot advance
+  # or back-claim a day. Set to 0 to count any login.
+  minimum-online-minutes: 10
+  # How many earned-but-unclaimed days one claim may pay out at once, newest
+  # last. Stops a long absence turning into one enormous payout.
+  max-back-claim-days: 31
+  # The reward granted is the highest entry whose 'day' is at or below the
+  # player's current streak. Adding day-14 or day-30 needs no code change.
+  #
+  # Every command runs from console, so use the plugin's own command syntax.
+  # Placeholders: %player% %uuid% %reward% %streak% %hours%
   rewards:
     day-1:
       day: 1
@@ -1818,11 +1765,12 @@ daily-rewards:
         - 'crate give %player% prime 1'
         - 'crate give %player% amethyst 1'
 
-# /rewards playtime claims each threshold once. Playtime is the server's own
-# PLAY_ONE_MINUTE statistic (genuine tick time); no external playtime plugin is
-# needed. A player may use /rewards claimall to collect every ready threshold
-# plus today's daily reward in one action.
 playtime-rewards:
+  # Cumulative playtime, counted in whole hours from Bukkit's own statistic, so
+  # it survives restarts and covers time played before this module existed.
+  #
+  # Each entry can be claimed exactly once, ever. The claim is recorded in
+  # rewards.yml next to the daily streak.
   enabled: true
   rewards:
     first-hour:
@@ -1877,9 +1825,6 @@ anti-bot:
   # every account on it are banned from rewards forever.
   max-accounts-per-ip: 3
 
-# Each reward command is run by console. Available placeholders:
-# %player%, %uuid%, %reward%, %streak% and %hours%.
-
 # ---------------------------------------------------------------------------
 # ANTI-AD PIPELINE - layers 2 and 3 of the advertising filter.
 #
@@ -1892,7 +1837,7 @@ anti-bot:
 # last few lines, which is the only way to catch a pitch spread across several
 # messages. Both fail OPEN: a missing model means messages pass, never punish.
 anti-ad:
-  own-domain: 'play.gildedmc.pro'
+  own-domain: 'coltcore.dpdns.org'
   l2:
     enabled: true
     model-resource: '/antiad.m5.bin'
@@ -1907,3 +1852,21 @@ anti-ad:
     context-messages: 5
   log:
     keep-days: 30
+
+player-picker:
+  # Any command that needs a username opens this instead of printing a usage
+  # line. One inventory lists currently-active players first, then players who
+  # left recently, and a written book at the bottom accepts any name at all -
+  # including offline accounts and names that have never joined.
+  #
+  # Gated commands: rankgive, promote, demote, hire, staffcode, block, ignore,
+  # playerwipe, sus (aliases flags/anticheat), activerank grant/regrant/check,
+  # rewards ban/pardon/resetplaytime, textguard unmute/stage/history.
+  title: '&8Choose a player'
+
+  # How long a departed player stays in the list. Nobody scrolls back further
+  # than this, and a longer window on a busy server is a slow memory leak.
+  recent-window-seconds: 900
+
+  # Hard cap on remembered departures, applied on top of the window.
+  recent-max: 200

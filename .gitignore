@@ -57,3 +57,25 @@
 !antiad/*.md
 !README.md
 !.gitignore
+
+# ---- agent memory and the code graph -------------------------------------
+# memory.md is the running development log; graphify-out/ is the generated
+# knowledge graph of this workspace. Both are wanted in history so a change can
+# be read against what was known at the time.
+#
+# graphify-out/cache/ is deliberately NOT tracked: 269 files, 34MB, entirely
+# regenerable by `graphify update .`. Same for the dated snapshot directories,
+# which are just a copy of the current graph.
+!memory.md
+!graphify-out/
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/manifest.json
+!graphify-out/graph.json
+!graphify-out/graph.html
+!graphify-out/.graphify_root
+!graphify-out/.graphify_labels.json
+!graphify-out/.graphify_labels.json.sig
+# Explicitly re-assert the exclusions, because the deny-all above would
+# otherwise have to be re-derived for anyone reading this file.
+graphify-out/cache/
+graphify-out/*/

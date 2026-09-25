@@ -29,14 +29,14 @@ import java.util.regex.Pattern;
  * lore shape.
  *
  * <h2>The information card</h2>
- * {@link #infoLore} renders the standard card used by /offend and anything
+ * {@link #infoLore} renders the standard card used by the punish menus and anything
  * else that needs to explain a destructive action before it is clicked:
  *
  * <pre>
  * &#ff0000&lBANS
  * &8Description:
  *
- * &#EEBB01Information:
+ * &#00ff00Information:
  * &fBans a player and prevents them from rejoining for their bantime.
  * ...
  * &cUse responsibly.
@@ -187,6 +187,21 @@ public final class UiKit {
     }
 
     /**
+     * The same chest, but with an {@link org.bukkit.inventory.InventoryHolder}
+     * attached.
+     *
+     * <p>Prefer this over {@link #chest(int, String)} for any menu that has to
+     * recognise its own clicks. Bukkit's {@code Inventory} exposes no title, so
+     * a holder is the only reliable way to tell one staff menu from another
+     * when both are open, and title-string comparison breaks the moment a title
+     * contains a colour code or is longer than the client renders.
+     */
+    public static Inventory chest(int rows, String title,
+                                  org.bukkit.inventory.InventoryHolder holder) {
+        return Bukkit.createInventory(holder, Math.max(1, Math.min(6, rows)) * 9, colour(title));
+    }
+
+    /**
      * Leaves empty slots empty.
      *
      * <p>This used to pack every free slot with a black glass pane. It was kept
@@ -211,6 +226,109 @@ public final class UiKit {
     }
 
     /** Border only: edges panelled, middle left clear for content. */
+    /**
+     * The house frame: dark edge, <b>orange corners</b>.
+     *
+     * <p>Applied through one method so every menu matches. Orange corners give
+     * the eye four anchors and make a 6-row chest read as a framed panel rather
+     * than a wall of slots.
+     */
+    public static final Material FRAME_EDGE = Material.BLACK_STAINED_GLASS_PANE;
+    public static final Material FRAME_CORNER = Material.ORANGE_STAINED_GLASS_PANE;
+
+    /** Red through to gold, used for every menu title. */
+    public static String titleGradient(String label) {
+        return gradient(label, "#ff3b3b", "#ffd700");
+    }
+
+    /** Title gradient with an explicit pair, for a menu with its own palette. */
+    public static String titleGradient(String label, String from, String to) {
+        return gradient(label, from, to);
+    }
+
+    /** Creates a chest with the house frame and title gradient already applied. */
+    public static Inventory themed(int rows, String label,
+                                   org.bukkit.inventory.InventoryHolder holder) {
+        Inventory inv = chest(rows, titleGradient(label), holder);
+        framed(inv, FRAME_EDGE, FRAME_CORNER);
+        return inv;
+    }
+
+    /** Creates a chest with the house frame, for menus that need no holder. */
+    public static Inventory themed(int rows, String label) {
+        return themed(rows, label, null);
+    }
+
+    /**
+     * A full interior row of alternating grey panes, used as a visual limit
+     * between sections of a menu.
+     *
+     * <p>Deliberately not part of the border: it sits between content rows, so a
+     * 4-row menu reads as two stacked panels rather than one undifferentiated
+     * grid, and the eye can tell at a glance which buttons belong together.
+     */
+    public static void limitRow(Inventory inv, int row, Material first, Material second) {
+        Material a = first == null ? Material.LIGHT_GRAY_STAINED_GLASS_PANE : first;
+        Material b = second == null ? Material.GRAY_STAINED_GLASS_PANE : second;
+        ItemStack left = item(a, " ");
+        ItemStack right = item(b, " ");
+        for (int c = 1; c < 8; c++) {
+            int slot = row * 9 + c;
+            if (inv.getItem(slot) == null) inv.setItem(slot, c % 2 == 0 ? right : left);
+        }
+    }
+
+    /**
+     * The slots strictly inside the border, in reading order.
+     *
+     * <p>Content must never occupy the outer ring. A button sitting on the
+     * frame reads as part of the decoration, and the frame is the one thing
+     * that makes the menu's shape legible at a glance. This is the single
+     * definition of "inside", so every menu agrees on where the frame ends.
+     */
+    public static List<Integer> interiorSlots(int size) {
+        List<Integer> slots = new ArrayList<>();
+        int rows = size / 9;
+        for (int r = 1; r < rows - 1; r++) {
+            for (int c = 1; c < 8; c++) {
+                slots.add(r * 9 + c);
+            }
+        }
+        return slots;
+    }
+
+    /** One page of interior slots, clamped to what is available. */
+    public static List<Integer> interiorPage(int size, int page, int perPage) {
+        List<Integer> all = interiorSlots(size);
+        int from = Math.max(0, page) * perPage;
+        if (from >= all.size()) return List.of();
+        return new ArrayList<>(all.subList(from, Math.min(all.size(), from + perPage)));
+    }
+
+    /**
+     * The last interior row, used for navigation.
+     *
+     * <p>Kept inside the border like everything else, so a 6-row menu gets 21
+     * content slots across three rows and 7 navigation slots on the fourth.
+     */
+    public static List<Integer> lastInteriorRow(int size) {
+        List<Integer> slots = new ArrayList<>();
+        int rows = size / 9;
+        int r = rows - 2;
+        for (int c = 1; c < 8; c++) slots.add(r * 9 + c);
+        return slots;
+    }
+
+    /**
+     * Draws the border ring and leaves every interior slot empty.
+     *
+     * <p>Order matters: call this before placing items, or it will overwrite
+     * anything already sitting on the frame.
+     */
+    public static void frame(Inventory inv, Material edge, Material corner) {
+        framed(inv, edge, corner);
+    }
+
     public static void border(Inventory inv, Material paneMaterial) {
         ItemStack pane = item(paneMaterial, " ");
         int rows = inv.getSize() / 9;
@@ -315,7 +433,7 @@ public final class UiKit {
         lore.add("&8Description:");
         if (description != null && !description.isBlank()) lore.add("&7" + description);
         lore.add(" ");
-        lore.add("&#EEBB01Information:");
+        lore.add("&#00ff00Information:");
         if (information != null) for (String line : information) lore.add("&f" + line);
         lore.add(" ");
         if (warning != null && !warning.isBlank()) {

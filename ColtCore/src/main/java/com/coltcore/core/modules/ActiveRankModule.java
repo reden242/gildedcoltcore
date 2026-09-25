@@ -161,6 +161,7 @@ public final class ActiveRankModule implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         if (!this.enabled) return;
         SchedulerCompat.runLater(this.plugin, () -> {
             if (event.getPlayer().isOnline()) check(event.getPlayer(), false);
@@ -322,7 +323,7 @@ public final class ActiveRankModule implements Listener {
         boolean has = this.granted.contains(of.getUniqueId().toString());
         int pct = (int) Math.min(100.0D, (h / this.requiredHours) * 100.0D);
         String bar = buildBar(pct);
-        Inventory inv = UiKit.chest(3, "&#00ff00&lACTIVE RANK");
+        Inventory inv = UiKit.themed(3, "ACTIVE RANK");
         UiKit.fillWithPanes(inv, Material.GRAY_STAINED_GLASS_PANE);
         List<String> lore = new ArrayList<>();
         lore.add("&7Playtime needed: &f" + this.requiredHours + "h");

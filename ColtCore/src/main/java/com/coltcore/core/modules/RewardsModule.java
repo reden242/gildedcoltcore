@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Statistic;
@@ -16,7 +19,13 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
+import com.coltcore.core.SchedulerCompat;
 
 /**
  * Config-driven daily and cumulative-playtime rewards.
@@ -29,7 +38,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * threshold. {@code /rewards claimall} grants the current daily reward and all
  * currently eligible, previously unclaimed playtime rewards in one action.
  */
-public final class RewardsModule {
+public final class RewardsModule implements Listener {
     public static final String PERM_USE = "coltcore.rewards";
     public static final String PERM_ADMIN = "coltcore.rewards.admin";
 
@@ -38,6 +47,11 @@ public final class RewardsModule {
     private FileConfiguration data;
     /** Anti-botting gate; null until the plugin wires it. */
     private AntibotGuard antibot;
+    /** When each tracked player's current online session began, in epoch millis. */
+    private final Map<UUID, Long> sessionStart = new ConcurrentHashMap<>();
+    /** The date bucket each open session is accumulating into. */
+    private final Map<UUID, String> sessionDate = new ConcurrentHashMap<>();
+    private SchedulerCompat.ManagedTask presenceTask;
 
     public RewardsModule(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -45,10 +59,110 @@ public final class RewardsModule {
 
     public void enable() {
         load();
+        this.presenceTask = SchedulerCompat.timer(this.plugin, this::flushAll, 20L * 60L, 20L * 60L);
     }
 
     public void disable() {
+        if (this.presenceTask != null) { this.presenceTask.cancel(); this.presenceTask = null; }
+        flushAll();
         save();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
+        this.sessionStart.put(event.getPlayer().getUniqueId(), System.currentTimeMillis());
+        this.sessionDate.put(event.getPlayer().getUniqueId(), today().toString());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
+        flush(event.getPlayer().getUniqueId());
+    }
+
+    /**
+     * A day only counts once the player has actually been here for the configured
+     * minimum, so leaving after a few seconds never advances the streak and a
+     * missed day can never be back-claimed for time that was never spent.
+     */
+    public long minimumOnlineSeconds() {
+        return Math.max(0L, this.plugin.getConfig().getLong("daily-rewards.minimum-online-minutes", 10L)) * 60L;
+    }
+
+    private long maxBackClaimDays() {
+        return Math.max(1L, this.plugin.getConfig().getLong("daily-rewards.max-back-claim-days", 31L));
+    }
+
+    /** Adds elapsed online time to today's bucket and the lifetime playtime total. */
+    private void flush(UUID id) {
+        Long started = this.sessionStart.remove(id);
+        String date = this.sessionDate.remove(id);
+        if (started == null || date == null || this.data == null) return;
+        long elapsed = (System.currentTimeMillis() - started) / 1000L;
+        if (elapsed <= 0) return;
+        String key = "players." + id + ".daily.seconds." + date;
+        this.data.set(key, this.data.getLong(key, 0L) + elapsed);
+        String total = "players." + id + ".playtime.total-seconds";
+        this.data.set(total, this.data.getLong(total, 0L) + elapsed);
+    }
+
+    private void flushAll() {
+        if (this.data == null) return;
+        for (UUID id : new ArrayList<>(this.sessionStart.keySet())) flush(id);
+        save();
+    }
+
+    /** Online seconds banked for a date, including the live session if it is today. */
+    public long onlineSeconds(UUID id, LocalDate date) {
+        if (this.data == null) return 0L;
+        long banked = this.data.getLong("players." + id + ".daily.seconds." + date, 0L);
+        if (today().equals(date)) {
+            Long started = this.sessionStart.get(id);
+            if (started != null) banked += (System.currentTimeMillis() - started) / 1000L;
+        }
+        return banked;
+    }
+
+    public boolean dailyEligible(Player player) {
+        return onlineSeconds(player.getUniqueId(), today()) >= minimumOnlineSeconds();
+    }
+
+    public boolean dailyClaimedToday(Player player) {
+        if (this.data == null) return false;
+        return this.data.getBoolean("players." + player.getUniqueId()
+                + ".daily.claims." + today(), false);
+    }
+
+    /** Every past-or-today date that earned a day but has not been claimed. */
+    public List<LocalDate> unclaimedEligibleDates(Player player) {
+        List<LocalDate> out = new ArrayList<>();
+        if (this.data == null) return out;
+        String root = "players." + player.getUniqueId() + ".daily.seconds.";
+        ConfigurationSection section = this.data.getConfigurationSection(root);
+        if (section == null) return out;
+        LocalDate today = today();
+        long need = minimumOnlineSeconds();
+        for (String key : section.getKeys(false)) {
+            LocalDate date;
+            try {
+                date = LocalDate.parse(key);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+            if (date.isAfter(today)) continue;
+            if (section.getLong(key, 0L) < need) continue;
+            if (this.data.getBoolean("players." + player.getUniqueId() + ".daily.claims." + key, false)) continue;
+            out.add(date);
+        }
+        out.sort(Comparator.naturalOrder());
+        long cap = maxBackClaimDays();
+        if (out.size() > cap) out = new ArrayList<>(out.subList(out.size() - (int) cap, out.size()));
+        return out;
+    }
+
+    public int streak(Player player) {
+        return this.data == null ? 0 : this.data.getInt(base(player) + ".daily.streak", 0);
     }
 
     public void reload() {
@@ -96,6 +210,21 @@ public final class RewardsModule {
             }
             reload();
             sender.sendMessage(ChatColor.GREEN + "Rewards configuration reloaded.");
+            return true;
+        }
+        if (args.length > 1 && args[0].equalsIgnoreCase("resetplaytime")) {
+            if (!sender.hasPermission(PERM_ADMIN) && !sender.isOp()) {
+                sender.sendMessage(ChatColor.RED + "You do not have permission. (" + PERM_ADMIN + ")");
+                return true;
+            }
+            UUID target = parseUuid(args[1]);
+            if (target == null) {
+                sender.sendMessage(ChatColor.RED + "Unknown player: " + args[1]);
+                return true;
+            }
+            resetPlaytime(target);
+            sender.sendMessage(ChatColor.GREEN + "Reset tracked playtime and playtime reward claims for "
+                    + args[1] + ".");
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -200,28 +329,104 @@ public final class RewardsModule {
             if (tell) player.sendMessage(ChatColor.RED + "Daily rewards are disabled.");
             return 0;
         }
-        LocalDate today = today();
-        String base = base(player);
-        if (today.toString().equals(this.data.getString(base + ".daily.last-date", ""))) {
-            if (tell) player.sendMessage(ChatColor.YELLOW + "You already claimed today's daily reward.");
+        long need = minimumOnlineSeconds();
+        List<LocalDate> dates = unclaimedEligibleDates(player);
+        if (dates.isEmpty()) {
+            if (tell) {
+                long have = onlineSeconds(player.getUniqueId(), today());
+                if (have < need) {
+                    long remaining = need - have;
+                    player.sendMessage(ChatColor.YELLOW + "You need " + (need / 60L)
+                            + " minutes online to count a day. "
+                            + Math.max(1L, (remaining + 59L) / 60L) + " more to go.");
+                } else {
+                    player.sendMessage(ChatColor.YELLOW + "You have no daily rewards ready to claim.");
+                }
+            }
             return 0;
         }
-        int oldStreak = this.data.getInt(base + ".daily.streak", 0);
-        LocalDate yesterday = today.minusDays(1);
-        String last = this.data.getString(base + ".daily.last-date", "");
-        int streak = yesterday.toString().equals(last) ? oldStreak + 1 : 1;
-        Reward reward = dailyReward(streak);
-        if (reward == null) {
-            if (tell) player.sendMessage(ChatColor.RED + "No daily reward is configured.");
-            return 0;
+
+        // Only the newest eligible date advances the streak; older back-claims are
+        // paid at their own day so nobody can farm a long streak by waiting.
+        LocalDate newest = dates.get(dates.size() - 1);
+        LocalDate previous = newest.minusDays(1);
+        int claimed = 0;
+        for (LocalDate date : dates) {
+            int day;
+            if (date.equals(newest)) {
+                String lastClaimed = newestClaimedDate(player);
+                int old = this.data.getInt(base(player) + ".daily.streak", 0);
+                day = previous.toString().equals(lastClaimed) ? old + 1 : 1;
+            } else {
+                day = Math.max(1, streakForDate(player, date));
+            }
+            Reward reward = dailyReward(day);
+            if (reward == null) continue;
+            execute(player, reward, day, playtimeHours(player));
+            this.data.set(base(player) + ".daily.claims." + date, true);
+            this.data.set(base(player) + ".daily.streak", day);
+            this.data.set(base(player) + ".daily.last-date", date.toString());
+            claimed++;
+            if (tell && date.equals(newest)) {
+                player.sendMessage(ChatColor.GREEN + "Claimed daily reward " + ChatColor.WHITE + reward.id
+                        + ChatColor.GREEN + " (day " + day + ").");
+            }
         }
-        execute(player, reward, streak, playtimeHours(player));
-        this.data.set(base + ".daily.last-date", today.toString());
-        this.data.set(base + ".daily.streak", streak);
-        save();
-        if (tell) player.sendMessage(ChatColor.GREEN + "Claimed daily reward " + ChatColor.WHITE + reward.id
-                + ChatColor.GREEN + " (day " + streak + ").");
-        return 1;
+        if (claimed > 0) {
+            save();
+            if (tell && claimed > 1) {
+                player.sendMessage(ChatColor.GREEN + "Also back-claimed " + (claimed - 1)
+                        + " earlier day(s) you had earned.");
+            }
+        }
+        return claimed;
+    }
+
+    /** Most recent date with a claim record, or empty. */
+    private String newestClaimedDate(Player player) {
+        String root = base(player) + ".daily.claims.";
+        ConfigurationSection section = this.data.getConfigurationSection(root);
+        if (section == null) return "";
+        String best = "";
+        for (String key : section.getKeys(false)) {
+            if (!section.getBoolean(key, false)) continue;
+            if (key.compareTo(best) > 0) best = key;
+        }
+        return best;
+    }
+
+    /** Streak a back-claimed date would have carried, counting only earned days. */
+    private int streakForDate(Player player, LocalDate date) {
+        String prefix = base(player) + ".daily.seconds.";
+        ConfigurationSection section = this.data.getConfigurationSection(prefix);
+        if (section == null) return 1;
+        long need = minimumOnlineSeconds();
+        int streak = 0;
+        for (LocalDate cursor = date; ; cursor = cursor.minusDays(1)) {
+            long seconds = section.getLong(cursor.toString(), 0L);
+            boolean claimed = this.data.getBoolean(base(player) + ".daily.claims." + cursor, false);
+            if (seconds < need && !claimed) break;
+            streak++;
+            if (cursor.equals(LocalDate.of(1970, 1, 1))) break;
+        }
+        return streak;
+    }
+
+    /**
+     * True when this specific playtime tier has already been paid out.
+     *
+     * <p>Reads the same {@code .playtime.claimed.<id>} key that
+     * {@link #claimPlaytime} writes, so the GUI can grey out a tier the moment
+     * it is claimed instead of inferring it from the hours total.
+     */
+    public boolean playtimeTierClaimed(Player player, String rewardId) {
+        return this.data.getBoolean(base(player) + ".playtime.claimed." + rewardId, false);
+    }
+
+    /** True when the player has enough hours for this tier and it is unpaid. */
+    public boolean playtimeTierReady(Player player, Reward reward) {
+        return playtimeHours(player) >= reward.threshold
+                && !playtimeTierClaimed(player, reward.id);
     }
 
     private int claimPlaytime(Player player, boolean tell) {
@@ -249,14 +454,30 @@ public final class RewardsModule {
         long hours = playtimeHours(player);
         String base = base(player);
         LocalDate today = today();
-        boolean dailyReady = !today.toString().equals(this.data.getString(base + ".daily.last-date", ""));
+        long need = minimumOnlineSeconds();
+        long have = onlineSeconds(player.getUniqueId(), today);
+        boolean eligible = have >= need;
+        boolean claimedToday = dailyClaimedToday(player);
+        List<LocalDate> pending = unclaimedEligibleDates(player);
         int timeReady = 0;
         for (Reward reward : playtimeRewards()) {
             if (hours >= reward.threshold && !this.data.getBoolean(base + ".playtime.claimed." + reward.id, false)) timeReady++;
         }
-        player.sendMessage(UiKit.colour("&#00ff00Rewards &8| &f" + hours + " hour"
+        player.sendMessage(UiKit.colour("&#EEBB01Rewards &8| &f" + hours + " hour"
                 + (hours == 1 ? "" : "s") + " played"));
-        player.sendMessage(ChatColor.GRAY + "Daily: " + (dailyReady ? ChatColor.GREEN + "ready" : ChatColor.YELLOW + "already claimed"));
+        player.sendMessage(ChatColor.GRAY + "Today online: " + ChatColor.WHITE + (have / 60L) + "m"
+                + ChatColor.GRAY + " (need " + (need / 60L) + "m)");
+        if (claimedToday) {
+            player.sendMessage(ChatColor.GRAY + "Daily: " + ChatColor.YELLOW + "claimed today"
+                    + ChatColor.GRAY + ", streak " + ChatColor.WHITE + streak(player));
+        } else if (eligible) {
+            player.sendMessage(ChatColor.GRAY + "Daily: " + ChatColor.GREEN + "ready");
+        } else {
+            player.sendMessage(ChatColor.GRAY + "Daily: " + ChatColor.YELLOW + "not enough time today");
+        }
+        if (!pending.isEmpty() && pending.size() > (claimedToday ? 0 : 1)) {
+            player.sendMessage(ChatColor.GRAY + "Back-claimable days: " + ChatColor.WHITE + pending.size());
+        }
         player.sendMessage(ChatColor.GRAY + "Playtime: " + (timeReady == 0 ? ChatColor.YELLOW + "none ready" : ChatColor.GREEN + String.valueOf(timeReady) + " ready"));
         player.sendMessage(ChatColor.GRAY + "Use " + ChatColor.WHITE + "/rewards claimall" + ChatColor.GRAY + " to claim everything available.");
     }
@@ -272,6 +493,11 @@ public final class RewardsModule {
     /** The daily entry the GUI shows for a streak, or null when unconfigured. */
     public Reward dailyRewardFor(int streak) {
         return dailyReward(Math.max(1, streak));
+    }
+
+    /** Every configured daily entry, ascending by day. Drives the paged GUI. */
+    public List<Reward> dailyRewards() {
+        return configured("daily-rewards.rewards", "day");
     }
 
     public List<Reward> playtimeRewards() {
@@ -304,8 +530,61 @@ public final class RewardsModule {
         }
     }
 
-    private long playtimeHours(Player player) {
-        return player.getStatistic(Statistic.PLAY_ONE_MINUTE) / (20L * 60L * 60L);
+    /**
+     * Tracked lifetime playtime in hours.
+     *
+     * <p>Deliberately not {@code Statistic.PLAY_ONE_MINUTE}: that counter is owned
+     * by the server and only moves while a player is online, but nothing in this
+     * plugin can reset it, so a "playtime wipe" run through PlayerWipe could
+     * never clear the very number the rewards read. Accumulating our own total
+     * means the wipe, the rewards and the GUI all agree on one store.
+     */
+    public long playtimeHours(Player player) {
+        if (this.data == null) return 0L;
+        long seconds = this.data.getLong("players." + player.getUniqueId() + ".playtime.total-seconds", 0L);
+        Long started = this.sessionStart.get(player.getUniqueId());
+        if (started != null) seconds += (System.currentTimeMillis() - started) / 1000L;
+        return seconds / 3600L;
+    }
+
+    /** Raw tracked seconds, for display. */
+    public long playtimeSeconds(Player player) {
+        if (this.data == null) return 0L;
+        long seconds = this.data.getLong("players." + player.getUniqueId() + ".playtime.total-seconds", 0L);
+        Long started = this.sessionStart.get(player.getUniqueId());
+        if (started != null) seconds += (System.currentTimeMillis() - started) / 1000L;
+        return seconds;
+    }
+
+    /** Zeroes tracked playtime. Called by the wipe path. */
+    public void resetPlaytime(UUID id) {
+        this.flush(id);
+        if (this.data == null) return;
+        this.data.set("players." + id + ".playtime.total-seconds", 0L);
+        ConfigurationSection claimed = this.data.getConfigurationSection("players." + id + ".playtime.claimed");
+        if (claimed != null) {
+            for (String key : claimed.getKeys(false)) this.data.set("players." + id + ".playtime.claimed." + key, false);
+        }
+        save();
+    }
+
+    private UUID parseUuid(String raw) {
+        if (raw == null) return null;
+        String value = raw.trim();
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ignored) {
+        }
+        if (value.matches("(?i)^[0-9a-f]{32}$")) {
+            try {
+                return UUID.fromString(value.replaceFirst(
+                        "(\\p{XDigit}{8})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}{12})",
+                        "$1-$2-$3-$4-$5"));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(value);
+        return op != null && op.hasPlayedBefore() ? op.getUniqueId() : null;
     }
 
     private LocalDate today() {

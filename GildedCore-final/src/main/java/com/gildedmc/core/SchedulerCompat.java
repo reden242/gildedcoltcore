@@ -23,6 +23,10 @@ public final class SchedulerCompat {
             BukkitTask current = this.task.get();
             if (current != null) current.cancel();
         }
+
+        public boolean isCancelled() {
+            return this.cancelled;
+        }
     }
 
     private SchedulerCompat() { }
@@ -45,13 +49,29 @@ public final class SchedulerCompat {
 
     public static ManagedTask timer(Plugin plugin, Runnable runnable, long delayTicks, long periodTicks) {
         ManagedTask managed = new ManagedTask();
-        Bukkit.getScheduler().runTaskTimer(plugin, managed::accept, delayTicks, periodTicks);
+        if (runnable == null) {
+            Bukkit.getScheduler().runTaskTimer(plugin, managed::accept, delayTicks, periodTicks);
+            return managed;
+        }
+        Bukkit.getScheduler().runTaskTimer(plugin, task -> {
+            managed.accept(task);
+            if (managed.isCancelled()) return;
+            runnable.run();
+        }, delayTicks, periodTicks);
         return managed;
     }
 
     public static ManagedTask timerAsync(Plugin plugin, Runnable runnable, long delayTicks, long periodTicks) {
         ManagedTask managed = new ManagedTask();
-        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, managed::accept, delayTicks, periodTicks);
+        if (runnable == null) {
+            Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, managed::accept, delayTicks, periodTicks);
+            return managed;
+        }
+        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task -> {
+            managed.accept(task);
+            if (managed.isCancelled()) return;
+            runnable.run();
+        }, delayTicks, periodTicks);
         return managed;
     }
 }

@@ -62,8 +62,8 @@ public final class ReviewGui implements Listener {
             UiKit.sound(player, org.bukkit.Sound.ENTITY_VILLAGER_NO, 1.0F);
             return;
         }
-        Inventory inv = UiKit.chest(SIZE, UiKit.gradient(TITLE, "#ff5d5d", "#ffb04d"));
-        UiKit.framed(inv, Material.BLACK_STAINED_GLASS_PANE, Material.RED_STAINED_GLASS_PANE);
+        Inventory inv = UiKit.themed(SIZE, UiKit.titleGradient(TITLE, "#ff3b3b", "#ffd700"));
+        UiKit.framed(inv, UiKit.FRAME_EDGE, UiKit.FRAME_CORNER);
         this.slotToFlag.clear();
 
         List<FlagReviewStore.Flag> flags = this.store.list();

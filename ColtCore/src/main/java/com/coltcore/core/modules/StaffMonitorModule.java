@@ -46,6 +46,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -115,9 +116,15 @@ public final class StaffMonitorModule implements Listener {
     private final Map<UUID, Long> lastActivity = new ConcurrentHashMap<>();
     /** last presence sample timestamp per online tracked staff. */
     private final Map<UUID, Long> lastSample = new ConcurrentHashMap<>();
+    /** Optional staff-rank test supplied by the host plugin; grants tracking without manual permissions. */
+    private Predicate<Player> staffPredicate;
 
     public StaffMonitorModule(JavaPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public void setStaffPredicate(Predicate<Player> staffPredicate) {
+        this.staffPredicate = staffPredicate;
     }
 
     /* ------------------------------------------------------------------ */
@@ -138,7 +145,7 @@ public final class StaffMonitorModule implements Listener {
                 this.plugin, this::cleanup, 20L * 60, 20L * 60 * 60 * 6);
         long now = System.currentTimeMillis();
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.hasPermission(PERM_TRACKED)) {
+            if (isTracked(p)) {
                 this.lastActivity.put(p.getUniqueId(), now);
                 this.lastSample.put(p.getUniqueId(), now);
             }
@@ -157,7 +164,7 @@ public final class StaffMonitorModule implements Listener {
     public void disable() {
         if (this.tickTask != null) { this.tickTask.cancel(); this.tickTask = null; }
         if (this.cleanupTask != null) { this.cleanupTask.cancel(); this.cleanupTask = null; }
-        samplePresence();
+        samplePresenceSync();
         closeDatabase();
     }
 
@@ -243,6 +250,7 @@ public final class StaffMonitorModule implements Listener {
                         + "idle_ms INTEGER NOT NULL DEFAULT 0,"
                         + "PRIMARY KEY (uuid, day))");
             }
+            migrateLegacySchema();
             return true;
         } catch (SQLException ex) {
             this.plugin.getLogger().warning("[StaffMonitor] SQLite unavailable: " + ex.getMessage());
@@ -254,6 +262,135 @@ public final class StaffMonitorModule implements Listener {
         if (this.db == null) return;
         try { this.db.close(); } catch (SQLException ignored) { }
         this.db = null;
+    }
+
+    private boolean tableHasColumn(String table, String column) {
+        try (ResultSet rs = this.db.getMetaData().getColumns(null, null, table, null)) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("COLUMN_NAME"))) return true;
+            }
+        } catch (SQLException ignored) { }
+        return false;
+    }
+
+    /**
+     * Older builds keyed presence and actions by player name. CREATE TABLE IF NOT
+     * EXISTS cannot adapt those tables, so every later insert would fail on a
+     * missing uuid column. Rebuild them keyed by UUID, resolving names only when
+     * the server still knows that account, and park anything unresolvable in a
+     * quarantine table instead of dropping it or inventing a UUID.
+     */
+    private void exec(String sql) throws SQLException {
+        try (Statement st = this.db.createStatement()) {
+            st.executeUpdate(sql);
+        }
+    }
+
+    private void migrateLegacySchema() {
+        try {
+            exec("CREATE TABLE IF NOT EXISTS staffmonitor_migrations ("
+                    + "id TEXT PRIMARY KEY NOT NULL, applied_at INTEGER NOT NULL)");
+        } catch (SQLException ignored) { }
+
+        if (!tableHasColumn("presence", "uuid") || !tableHasColumn("actions", "uuid")) {
+            this.plugin.getLogger().warning("[StaffMonitor] legacy name-keyed schema detected, migrating to UUID keys.");
+            try {
+                this.db.setAutoCommit(false);
+                exec("ALTER TABLE presence RENAME TO presence_legacy");
+                exec("CREATE TABLE presence ("
+                        + "uuid TEXT NOT NULL, name TEXT NOT NULL, day TEXT NOT NULL,"
+                        + "online_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "active_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "idle_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "PRIMARY KEY (uuid, day))");
+                exec("CREATE TABLE IF NOT EXISTS presence_unresolved ("
+                        + "name TEXT NOT NULL, day TEXT NOT NULL,"
+                        + "online_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "active_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "idle_ms INTEGER NOT NULL DEFAULT 0,"
+                        + "PRIMARY KEY (name, day))");
+                try (Statement legacy = this.db.createStatement();
+                     ResultSet rs = legacy.executeQuery(
+                             "SELECT name, day, online_ms, active_ms, idle_ms FROM presence_legacy")) {
+                    while (rs.next()) {
+                        String name = rs.getString(1);
+                        String day = rs.getString(2);
+                        long online = rs.getLong(3);
+                        long active = rs.getLong(4);
+                        long idle = rs.getLong(5);
+                        UUID resolved = resolveLegacyUuid(name);
+                        if (resolved == null) {
+                            try (PreparedStatement ps = this.db.prepareStatement(
+                                    "INSERT OR IGNORE INTO presence_unresolved(name,day,online_ms,active_ms,idle_ms)"
+                                    + " VALUES(?,?,?,?,?)")) {
+                                ps.setString(1, name);
+                                ps.setString(2, day);
+                                ps.setLong(3, online);
+                                ps.setLong(4, active);
+                                ps.setLong(5, idle);
+                                ps.executeUpdate();
+                            }
+                            continue;
+                        }
+                        try (PreparedStatement ps = this.db.prepareStatement(
+                                "INSERT INTO presence(uuid,name,day,online_ms,active_ms,idle_ms) VALUES(?,?,?,?,?,?)"
+                                + " ON CONFLICT(uuid,day) DO UPDATE SET"
+                                + " name=excluded.name,"
+                                + " online_ms=online_ms+excluded.online_ms,"
+                                + " active_ms=active_ms+excluded.active_ms,"
+                                + " idle_ms=idle_ms+excluded.idle_ms")) {
+                            ps.setString(1, resolved.toString());
+                            ps.setString(2, name);
+                            ps.setString(3, day);
+                            ps.setLong(4, online);
+                            ps.setLong(5, active);
+                            ps.setLong(6, idle);
+                            ps.executeUpdate();
+                        }
+                    }
+                }
+                exec("DROP TABLE presence_legacy");
+                this.db.commit();
+            } catch (SQLException ex) {
+                try { this.db.rollback(); } catch (SQLException ignored) { }
+                this.plugin.getLogger().warning("[StaffMonitor] presence migration failed: " + ex.getMessage());
+            } finally {
+                try { this.db.setAutoCommit(true); } catch (SQLException ignored) { }
+            }
+        }
+
+        if (!tableHasColumn("actions", "uuid")) {
+            try {
+                exec("ALTER TABLE actions ADD COLUMN uuid TEXT");
+                try (Statement legacy = this.db.createStatement();
+                     ResultSet rs = legacy.executeQuery("SELECT DISTINCT name FROM actions")) {
+                    while (rs.next()) {
+                        UUID resolved = resolveLegacyUuid(rs.getString(1));
+                        if (resolved == null) continue;
+                        try (PreparedStatement ps = this.db.prepareStatement(
+                                "UPDATE actions SET uuid=? WHERE uuid IS NULL AND name=?")) {
+                            ps.setString(1, resolved.toString());
+                            ps.setString(2, rs.getString(1));
+                            ps.executeUpdate();
+                        }
+                    }
+                }
+            } catch (SQLException ex) {
+                this.plugin.getLogger().warning("[StaffMonitor] actions migration failed: " + ex.getMessage());
+            }
+        }
+    }
+
+    /** Resolves a legacy name to a real account UUID, or null when unknown. */
+    private UUID resolveLegacyUuid(String name) {
+        if (name == null || name.isEmpty()) return null;
+        try {
+            OfflinePlayer op = Bukkit.getOfflinePlayer(name);
+            if (op == null || !op.hasPlayedBefore()) return null;
+            return op.getUniqueId();
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private void async(Runnable r) {
@@ -383,20 +520,21 @@ public final class StaffMonitorModule implements Listener {
         if (event.getFrom().getBlockX() == event.getTo().getBlockX()
          && event.getFrom().getBlockY() == event.getTo().getBlockY()
          && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) return;
-        if (event.getPlayer().hasPermission(PERM_TRACKED)) touch(event.getPlayer());
+        if (event.getPlayer().hasPermission(PERM_TRACKED) || this.staffPredicate != null && this.staffPredicate.test(event.getPlayer())) touch(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         if (!this.enabled) return;
-        if (event.getPlayer().hasPermission(PERM_TRACKED)) touch(event.getPlayer());
+        if (isTracked(event.getPlayer())) touch(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         if (!this.enabled) return;
         Player p = event.getPlayer();
-        if (!p.hasPermission(PERM_TRACKED)) return;
+        if (!isTracked(p)) return;
         long now = System.currentTimeMillis();
         this.lastActivity.put(p.getUniqueId(), now);
         this.lastSample.put(p.getUniqueId(), now);
@@ -404,9 +542,10 @@ public final class StaffMonitorModule implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         if (!this.enabled) return;
         Player p = event.getPlayer();
-        samplePlayer(p, System.currentTimeMillis());
+        if (isTracked(p)) samplePlayer(p, System.currentTimeMillis(), true);
         this.lastActivity.remove(p.getUniqueId());
         this.lastSample.remove(p.getUniqueId());
     }
@@ -416,11 +555,28 @@ public final class StaffMonitorModule implements Listener {
         if (!this.enabled || this.db == null) return;
         long now = System.currentTimeMillis();
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.hasPermission(PERM_TRACKED)) samplePlayer(p, now);
+            if (isTracked(p)) samplePlayer(p, now, false);
         }
     }
 
-    private void samplePlayer(Player p, long now) {
+    /**
+     * Final drain used on shutdown. Writes inline instead of handing the work to
+     * the async pool, because the pool is rejected once the plugin is disabling
+     * and the connection is closed immediately afterwards.
+     */
+    private void samplePresenceSync() {
+        if (this.db == null) return;
+        long now = System.currentTimeMillis();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (isTracked(p)) samplePlayer(p, now, true);
+        }
+    }
+
+    private boolean isTracked(Player p) {
+        return p.hasPermission(PERM_TRACKED) || this.staffPredicate != null && this.staffPredicate.test(p);
+    }
+
+    private void samplePlayer(Player p, long now, boolean writeInline) {
         UUID id = p.getUniqueId();
         Long prev = this.lastSample.get(id);
         if (prev == null) { this.lastSample.put(id, now); return; }
@@ -435,7 +591,11 @@ public final class StaffMonitorModule implements Listener {
         final long online = slice;
         final long active = idle ? 0L : slice;
         final long idleMs = idle ? slice : 0L;
-        async(() -> upsertPresence(id, name, day, online, active, idleMs));
+        if (writeInline) {
+            upsertPresence(id, name, day, online, active, idleMs);
+        } else {
+            async(() -> upsertPresence(id, name, day, online, active, idleMs));
+        }
     }
 
     private void upsertPresence(UUID id, String name, String day,
@@ -624,9 +784,9 @@ public final class StaffMonitorModule implements Listener {
                             "",
                             "&eClick &7for the full timeline.")));
                 }
-                inv.setItem(48, item(Material.GOLD_INGOT, "&#00ff00Top 10", Collections.singletonList("&7Leaderboards")));
-                inv.setItem(49, item(Material.CLOCK, "&bActivity", Collections.singletonList("&7Online vs Active vs Idle")));
-                inv.setItem(50, item(Material.ENDER_EYE, "&dMost AFK",
+                inv.setItem(39, item(Material.GOLD_INGOT, "&#00ff00Top 10", Collections.singletonList("&7Leaderboards")));
+                inv.setItem(40, item(Material.CLOCK, "&bActivity", Collections.singletonList("&7Online vs Active vs Idle")));
+                inv.setItem(41, item(Material.ENDER_EYE, "&dMost AFK",
                     Arrays.asList("&7Ranked by total idle time",
                             "&7across the whole window.")));
                 viewer.openInventory(inv);
@@ -688,16 +848,16 @@ public final class StaffMonitorModule implements Listener {
                                     "&7When: &f" + STAMP.format(Instant.ofEpochMilli(ts)),
                                     "&7Risk: &f" + r[8])));
                 }
-                inv.setItem(45, item(Material.ARROW, "&ePrevious page",
+                inv.setItem(37, item(Material.ARROW, "&ePrevious page",
                         Collections.singletonList("&7Page " + (page + 1))));
-                inv.setItem(53, item(Material.ARROW, "&eNext page",
+                inv.setItem(43, item(Material.ARROW, "&eNext page",
                         Collections.singletonList("&7Page " + (page + 1))));
-                inv.setItem(46, item(Material.BARRIER, "&cBack", null));
-                inv.setItem(48, item(Material.IRON_SWORD, "&cPUNISH", null));
-                inv.setItem(49, item(Material.ENDER_PEARL, "&bTELEPORT", null));
-                inv.setItem(50, item(Material.CHEST, "&aGIVE", null));
-                inv.setItem(51, item(Material.GLASS, "&fVANISH", null));
-                inv.setItem(52, item(Material.REDSTONE, "&4Suspicious only", null));
+                inv.setItem(38, item(Material.BARRIER, "&cBack", null));
+                inv.setItem(39, item(Material.IRON_SWORD, "&cPUNISH", null));
+                inv.setItem(40, item(Material.ENDER_PEARL, "&bTELEPORT", null));
+                inv.setItem(41, item(Material.CHEST, "&aGIVE", null));
+                inv.setItem(42, item(Material.GLASS, "&fVANISH", null));
+                inv.setItem(44, item(Material.REDSTONE, "&4Suspicious only", null));
                 viewer.openInventory(inv);
             });
         });
@@ -781,7 +941,7 @@ public final class StaffMonitorModule implements Listener {
                             "&7Idle: &c" + duration(idle),
                             "&7Active share: " + (pct >= 60 ? "&a" : pct >= 30 ? "&e" : "&c") + pct + "%")));
                 }
-                inv.setItem(49, item(Material.BARRIER, "&cBack", null));
+                inv.setItem(40, item(Material.BARRIER, "&cBack", null));
                 viewer.openInventory(inv);
             });
         });
@@ -869,11 +1029,11 @@ public final class StaffMonitorModule implements Listener {
                             Arrays.asList("&7Nothing in the last " + days + " days.",
                                     "&8Only holders of staffmonitor.tracked are recorded.")));
                 }
-                inv.setItem(48, item(Material.CLOCK, "&eRanked by total idle time",
+                inv.setItem(39, item(Material.CLOCK, "&eRanked by total idle time",
                         Arrays.asList("&7Worst first, across &f" + days + " &7days.",
                                 "&7Being active right now does not remove",
                                 "&7anyone from this list.")));
-                inv.setItem(49, item(Material.BARRIER, "&cBack", null));
+                inv.setItem(40, item(Material.BARRIER, "&cBack", null));
                 viewer.openInventory(inv);
             });
         });

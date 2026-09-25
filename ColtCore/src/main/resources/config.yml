@@ -79,6 +79,7 @@ staffmanager:
     - sradmin
     - manager
     - executive
+    - dev
     - developer
     - co-owner
     - owner
@@ -118,6 +119,8 @@ rewards:
     - co-owner
     - partner
     - manager
+    - executive
+    - dev
     - developer
     - sradmin
     - admin
@@ -144,12 +147,13 @@ join-alerts:
     - jradmin
     - admin
     - sradmin
+    - executive
+    - dev
     - developer
     - manager
     - partner
     - co-owner
     - owner
-
 rankgive:
   command: "lp user %player% parent set %rank%"
   allowed-ranks:
@@ -177,6 +181,8 @@ chat-limiter:
       - jradmin
       - admin
       - sradmin
+      - executive
+      - dev
       - developer
       - manager
       - partner
@@ -227,6 +233,32 @@ playerwipe:
 
   # %player% %stat% %value% are substituted.
   stat-command: 'statsmgr set %player% %stat% %value%'
+
+  # Also clear the server's own vanilla playtime statistic when the PLAYTIME or
+  # RESET ALL category runs. This is a different number from every command above:
+  # it lives in the player's vanilla NBT and is what the active-rank check and
+  # external stats viewers read. Bukkit only exposes it for an online player, so
+  # an offline target is queued and cleared on their next login.
+  reset-bukkit-statistics: true
+
+  # When the wipe target is OFFLINE, also store the command set and replay it
+  # when that account next logs in. Most wipe commands need the player online
+  # (statsmgr, /clear) or quietly do nothing otherwise, and every command here
+  # is a reset, so running it twice is harmless. Stored in pending-wipes.yml as
+  # just a UUID, the name, your label and the command lines - no player data.
+  #
+  # Review with /playerwipe pending, drop one with /playerwipe cancel <uuid>.
+  queue-offline-wipes: true
+  # When the target is offline, load them into the server for the single tick
+  # the wipe runs on, then remove them. The server can only write a player's
+  # stored data back through a player object, so this is how an offline account
+  # gets its stats touched without waiting for them to log in. Nothing external
+  # connects and the account is never broadcast to real clients. If the server
+  # internals do not match, this reports unavailable and the queue above is used.
+  offline-synthetic-load: true
+  # Give up on a queued wipe after this many failed attempts so a permanently
+  # broken command cannot sit in the queue forever.
+  queue-max-attempts: 3
 
   # MIRROR EVERY WIPE TO DISCORD.
   #
@@ -301,23 +333,27 @@ playerwipe:
         - mob_kills
         - money_made
         - money_spent
-        - playtime
+        - play_time
     playtime:
       enabled: true
       slot: 14
       icon: CLOCK
       display-name: '&#00ff00&lPLAYTIME'
-      description: 'EssentialsX playtime'
+      description: 'Tracked playtime and its reward claims'
       information:
-        - 'Resets the playtime EssentialsX has recorded.'
-        - 'Note: this also resets progress towards the active rank.'
+        - 'Zeroes the playtime this plugin tracks for rewards,'
+        - 'and re-locks every playtime reward that was claimed.'
+        - ''
+        - 'The EssentialsX line is separate and only runs if you'
+        - 'actually run EssentialsX. Delete it otherwise.'
       warning: 'This cannot be undone.'
       all-commands:
+        - 'rewards resetplaytime %uuid%'
         - 'essentials:playtime reset %player%'
 
     inventory:
       enabled: true
-      slot: 15
+      slot: 20
       icon: CHEST
       display-name: '&f&lINVENTORY'
       description: 'Everything they are carrying'
@@ -332,7 +368,7 @@ playerwipe:
 
     enderchest:
       enabled: true
-      slot: 16
+      slot: 21
       icon: ENDER_CHEST
       display-name: '&5&lENDER CHEST'
       description: 'Ender chest and AxVaults'
@@ -400,6 +436,8 @@ playerwipe:
       - keys
       - playtime
       - homes
+      - inventory
+      - enderchest
     # Anything extra to run after the categories.
     all-commands: []
 
@@ -411,9 +449,6 @@ creative-guard:
   messages:
     blocked: "&cCreative item spawning is owner-only."
     notify: "&fBlocked &e%player% &ffrom %action% creative item &e%item%&f."
-
-
-
 
 lagguard:
   enabled: true
@@ -493,7 +528,6 @@ lagguard:
     audit-log: true
     audit-every-cancelled-event: false
     per-chunk-cooldown-ms: 60000
-
 
   # Superseded by lagguard.entity-limit below, kept for reference only.
   # The dedicated minecart limiter was retired: the unified entity limit owns
@@ -582,7 +616,6 @@ lagguard:
       # The cart comes back in the player's inventory SILENTLY - no message.
       refund: true
 
-
 # Integrated smart tips. Context-aware tips look at recent chat topics and prefer useful matching tips.
 smart-tips:
   enabled: true
@@ -632,7 +665,6 @@ smart-tips:
       - "Use &e/tips off &fto disable tips. Use &e/tips on &fto bring them back."
 
 # Integrated smart redstone guard. It disables noisy redstone by block, chunk, or 32x32-chunk region.
-
 
 stash:
   # Discord webhook for stash alerts. Blank disables webhook alerts.
@@ -1118,6 +1150,35 @@ active-rank:
   # mid-session does not have to relog.
   check-interval-seconds: 300
 
+vanish-announce:
+  # Posts a message when a staff member vanishes or unvanishes. Implemented
+  # inside this plugin: it hooks EssentialsX and SuperVanish/PremiumVanish
+  # toggle events directly and falls back to metadata sampling for providers
+  # that publish no event (StaffSuite, SayanVanish, AdvancedVanish, CMI,
+  # VanishNoPacket). No join-message plugin is required.
+  enabled: true
+
+  # Sent to everyone when a player vanishes.
+  leave-message: '&c[-] &f%player%'
+
+  # Sent to everyone when a player unvanishes on the default rank.
+  join-message: '&c[+] &f%player%'
+
+  # Sent when a ranked player unvanishes, instead of join-message. The [+] is
+  # deliberately omitted: the prefix already reads as the arrival notice, and
+  # printing both used to show the name twice. Use a real newline for a
+  # second line.
+  ranked-join-message: '%rank%%player%\n&7Has joined!'
+
+  # Semicolon-separated. Everyone who passes at least one of these sees the
+  # ranked-join-message. Leave empty to show it to ranked players only.
+  ranked-viewers: ''
+
+  # Metadata fallback sample period, in ticks. Only used for providers with
+  # no toggle event we can hook. 20 ticks is one second; lower is smoother but
+  # costs more. Event-hooked providers ignore this.
+  poll-ticks: 20
+
 staff-macro:
   # Catches STAFF who are AFK-farming, macroing or auto-clicking.
   #
@@ -1146,6 +1207,9 @@ staff-macro:
     - admin
     - sradmin
     - manager
+    - executive
+    - dev
+    - developer
     - co-owner
     - owner
 
@@ -1287,7 +1351,6 @@ punishments:
     UNMUTE: 'unmute %player%'
     UNBAN: 'unban %player%'
     UNBANIP: 'unbanip %player%'
-
 
   # How often the sweep runs. It also runs once a minute after startup, so a
   # server that restarts often still prunes.
@@ -1446,7 +1509,6 @@ redstone-unstaler:
   # Log every fixed block. Off by default; enable when investigating a farm.
   log-repairs: false
 
-
 review:
   # Human sign-off on automated punishments, and the training loop it feeds.
   #
@@ -1502,12 +1564,18 @@ review:
   # review rather than queueing without limit.
   max-pending: 20
 
-
 daily-rewards:
   # Once per calendar day, in this timezone. A missed day resets the streak to
   # one, so this is a consecutive-day streak rather than a running total.
   enabled: true
   timezone: 'UTC'
+  # A calendar day only counts once the player has been online this long on it.
+  # Someone who joins and leaves straight away earns nothing and cannot advance
+  # or back-claim a day. Set to 0 to count any login.
+  minimum-online-minutes: 10
+  # How many earned-but-unclaimed days one claim may pay out at once, newest
+  # last. Stops a long absence turning into one enormous payout.
+  max-back-claim-days: 31
   # The reward granted is the highest entry whose 'day' is at or below the
   # player's current streak. Adding day-14 or day-30 needs no code change.
   #
@@ -1784,3 +1852,20 @@ anti-ad:
     context-messages: 5
   log:
     keep-days: 30
+player-picker:
+  # Any command that needs a username opens this instead of printing a usage
+  # line. One inventory lists currently-active players first, then players who
+  # left recently, and a written book at the bottom accepts any name at all -
+  # including offline accounts and names that have never joined.
+  #
+  # Gated commands: rankgive, promote, demote, hire, staffcode, block, ignore,
+  # playerwipe, sus (aliases flags/anticheat), activerank grant/regrant/check,
+  # rewards ban/pardon/resetplaytime, textguard unmute/stage/history.
+  title: '&8Choose a player'
+
+  # How long a departed player stays in the list. Nobody scrolls back further
+  # than this, and a longer window on a busy server is a slow memory leak.
+  recent-window-seconds: 900
+
+  # Hard cap on remembered departures, applied on top of the window.
+  recent-max: 200

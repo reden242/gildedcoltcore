@@ -29,7 +29,27 @@ public final class VanishSupport {
                 return true;
             }
         }
-        return premiumVanish(player) || essentialsVanish(player) || cmi(player);
+        return premiumVanish(player) || essentialsVanish(player) || cmi(player) || advancedVanish(player);
+    }
+
+    /**
+     * AdvancedVanish.
+     *
+     * <p>Exposes a Kotlin singleton: {@code AdvancedVanishAPI.INSTANCE}, whose
+     * {@code isPlayerVanished(Player)} is the authoritative state check.
+     */
+    private static boolean advancedVanish(Player player) {
+        try {
+            if (!pluginEnabled(player, "AdvancedVanish")) return false;
+            Class<?> api = Class.forName("me.quantiom.advancedvanish.util.AdvancedVanishAPI");
+            Object instance = api.getField("INSTANCE").get(null);
+            if (instance == null) return false;
+            Method isPlayerVanished = api.getMethod("isPlayerVanished", Player.class);
+            return Boolean.TRUE.equals(isPlayerVanished.invoke(instance, player));
+        } catch (Throwable ignored) {
+            // AdvancedVanish is optional and its API is not version-stable.
+        }
+        return false;
     }
 
     /**

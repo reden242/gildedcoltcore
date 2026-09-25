@@ -28,6 +28,7 @@ public final class JoinRewardModule implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onJoin(PlayerJoinEvent event) {
+        if (SyntheticPlayerLoader.isSynthetic(event.getPlayer())) return;
         Player player = event.getPlayer();
         if (player.hasPlayedBefore()) return;
         if (!this.plugin.getConfig().getBoolean("join-rewards.enabled", true)) return;
