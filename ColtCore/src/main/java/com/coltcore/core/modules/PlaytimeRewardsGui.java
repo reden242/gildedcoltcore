@@ -4,11 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.Sound;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -17,37 +15,49 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import com.coltcore.core.modules.RewardsModule.Reward;
 
 /**
- * Playtime claim GUI: all 41 milestones on one page.
+ * Playtime claim GUI, paginated.
  *
  * <pre>
- *   Row 0: border, info at slot 4 (total active hours + next milestone)
- *   Milestone i (0 = hour 1 ... 40 = hour 200) at slot 9 + i (9-49)
- *   Slots 50-52: border. Slot 53: Claim All.
+ *   row 0        frame, info star at slot 4
+ *   rows 1-3     18 milestone slots: 10-15, 19-24, 28-33  (3 pages for 41)
+ *   row 4        page indicator (40) alone, as a separator
+ *   row 5        legend (45), prev (47), CLAIM ALL (49), next (51), stats (53)
  * </pre>
  *
- * <p>States: claimed = green pane + "Claimed"; reached unclaimed = reward
- * icon with glow + "Click to claim"; not reached = gray pane + "Reach X
- * (Y left)". Hours 100/150/195 use a distinct Prime icon, hour 200 a distinct
- * finale icon.
+ * <p>Milestones come from the configured ladder, so the page count follows the
+ * config rather than a hardcoded 41 - a ladder with fewer or more tiers still
+ * pages correctly.
+ *
+ * <p>Icons are dyes: LIME claimed, ORANGE ready, GRAY locked, LIGHT_BLUE for
+ * prime, PURPLE for the 200-hour finale.
  */
 public final class PlaytimeRewardsGui implements Listener {
 
     private static final int SIZE = 54;
     private static final String TITLE = UiKit.titleGradient("Playtime Rewards");
 
-    private static final Material EDGE = UiKit.FRAME_EDGE;
     private static final int INFO_SLOT = 4;
-    private static final int CLAIM_ALL_SLOT = 53;
+    private static final int PREV_SLOT = 47;
+    private static final int PAGE_SLOT = 40;
+    private static final int NEXT_SLOT = 51;
+    private static final int LEGEND_SLOT = 45;
+    private static final int CLAIM_ALL_SLOT = 49;
+    private static final int STATS_SLOT = 53;
 
-    private static final java.util.Set<Integer> PRIME_HOURS =
-            java.util.Set.of(100, 150, 195);
+    private static final int[] TIER_SLOTS = {
+            10, 11, 12, 13, 14, 15,
+            19, 20, 21, 22, 23, 24,
+            28, 29, 30, 31, 32, 33,
+    };
+    private static final int PER_PAGE = TIER_SLOTS.length;
+
+    private static final List<Integer> PRIME_HOURS = List.of(100, 150, 195);
     private static final int FINAL_HOUR = 200;
 
     private final RewardsModule rewards;
@@ -57,107 +67,140 @@ public final class PlaytimeRewardsGui implements Listener {
     }
 
     public static final class Holder implements InventoryHolder {
+        private final int page;
+
+        public Holder(int page) {
+            this.page = page;
+        }
+
+        public int page() {
+            return this.page;
+        }
+
         @Override
         public Inventory getInventory() {
             return null;
         }
     }
 
+    private int pageCount() {
+        List<Integer> hours = this.rewards.playtimeMilestoneHours();
+        return Math.max(1, (hours.size() + PER_PAGE - 1) / PER_PAGE);
+    }
+
     public void openGui(Player player) {
-        Inventory inv = UiKit.chest(6, TITLE, new Holder());
-        render(player, inv);
+        openPage(player, 0);
+    }
+
+    private void openPage(Player player, int page) {
+        int pages = pageCount();
+        int safe = Math.max(0, Math.min(page, pages - 1));
+        Inventory inv = UiKit.chest(6, TITLE, new Holder(safe));
+        render(player, inv, safe, pages);
         player.openInventory(inv);
     }
 
-    private boolean isOurs(Inventory inv) {
+    private boolean holderOf(Inventory inv) {
         return inv != null && inv.getHolder() instanceof Holder;
     }
 
-    /**
-     * The 41 milestones deliberately occupy slots 9-49, which crosses the
-     * ring on both sides and along the bottom - one page beats a perfect
-     * frame. The house frame is applied last so the top row, the surviving
-     * ring slots and the corner accents still read as /coltcore.
-     */
-    private void render(Player player, Inventory inv) {
+    private void render(Player player, Inventory inv, int page, int pages) {
+        renderMilestones(player, inv, page);
         inv.setItem(INFO_SLOT, infoItem(player));
-        renderMilestones(player, inv);
+        renderNav(inv, page, pages);
         inv.setItem(CLAIM_ALL_SLOT, claimAllButton(player));
+        inv.setItem(LEGEND_SLOT, legend());
+        inv.setItem(STATS_SLOT, statsItem(player));
         UiKit.framed(inv, UiKit.FRAME_EDGE, UiKit.FRAME_CORNER);
         player.updateInventory();
     }
 
-    private void renderMilestones(Player player, Inventory inv) {
+    private void renderMilestones(Player player, Inventory inv, int page) {
         List<Integer> hours = this.rewards.playtimeMilestoneHours();
-        long haveHours = this.rewards.activeHours(player);
+        long have = this.rewards.activeHours(player);
         boolean completed = this.rewards.playtimeCompleted(player);
-        for (int i = 0; i < hours.size() && i < 41; i++) {
-            int hour = hours.get(i);
-            int slot = 9 + i;
-            Reward reward = this.rewards.playtimeRewardForHour(hour);
-            if (reward == null) {
-                inv.setItem(slot, lockedMilestone(hour, haveHours));
+        int first = page * PER_PAGE;
+
+        for (int i = 0; i < PER_PAGE; i++) {
+            int index = first + i;
+            if (index >= hours.size()) {
+                inv.setItem(TIER_SLOTS[i], null);
                 continue;
             }
+            int hour = hours.get(index);
+            Reward reward = this.rewards.playtimeRewardForHour(hour);
             boolean claimed = completed || this.rewards.playtimeHourClaimed(player, hour);
-            if (claimed) {
-                inv.setItem(slot, claimedMilestone(hour, reward));
-            } else if (haveHours >= hour) {
-                inv.setItem(slot, readyMilestone(hour, reward));
+            if (reward == null) {
+                inv.setItem(TIER_SLOTS[i], lockedMilestone(hour, have));
+            } else if (claimed) {
+                inv.setItem(TIER_SLOTS[i], claimedMilestone(hour, reward));
+            } else if (have >= hour) {
+                inv.setItem(TIER_SLOTS[i], readyMilestone(hour, reward));
             } else {
-                inv.setItem(slot, lockedMilestone(hour, haveHours));
+                inv.setItem(TIER_SLOTS[i], lockedMilestone(hour, have));
             }
         }
     }
 
+    private void renderNav(Inventory inv, int page, int pages) {
+        if (page > 0) {
+            inv.setItem(PREV_SLOT, named(Material.ARROW,
+                    ChatColor.YELLOW + "" + ChatColor.BOLD + "Previous page",
+                    ChatColor.GRAY + "Page " + page + " of " + pages));
+        }
+        if (page < pages - 1) {
+            inv.setItem(NEXT_SLOT, named(Material.ARROW,
+                    ChatColor.YELLOW + "" + ChatColor.BOLD + "Next page",
+                    ChatColor.GRAY + "Page " + (page + 2) + " of " + pages));
+        }
+        inv.setItem(PAGE_SLOT, named(Material.PAPER,
+                ChatColor.AQUA + "" + ChatColor.BOLD + "Page " + (page + 1) + " of " + pages,
+                ChatColor.GRAY + "Click a milestone to claim it on its own."));
+    }
+
     private ItemStack claimedMilestone(int hour, Reward reward) {
         ItemStack icon = new ItemStack(Material.LIME_DYE);
-        name(icon, ChatColor.GREEN + "" + ChatColor.BOLD + "Hour " + hour);
+        named(icon, ChatColor.GREEN + "" + ChatColor.BOLD + "Hour " + hour);
         List<String> lore = contentsLore(reward);
         lore.add("");
-        lore.add(ChatColor.GREEN + "Claimed");
-        lore(lore, icon);
+        lore.add(ChatColor.GREEN + "" + ChatColor.BOLD + "Claimed");
+        lore(icon, lore);
         return icon;
     }
 
     private ItemStack readyMilestone(int hour, Reward reward) {
         ItemStack icon = milestoneIcon(hour, reward);
-        name(icon, ChatColor.GREEN + "" + ChatColor.BOLD + "Hour " + hour);
+        named(icon, ChatColor.GREEN + "" + ChatColor.BOLD + "Hour " + hour);
         List<String> lore = contentsLore(reward);
         String tag = hourTag(hour);
-        if (tag != null) {
-            lore.add(0, tag);
-        }
+        if (tag != null) lore.add(0, tag);
         lore.add("");
         lore.add(ChatColor.GREEN + "" + ChatColor.BOLD + "Click to claim");
-        lore(lore, icon);
-        glow(icon);
+        lore(icon, lore);
+        UiKit.glow(icon);
         return icon;
     }
 
-    private ItemStack lockedMilestone(int hour, long haveHours) {
+    private ItemStack lockedMilestone(int hour, long have) {
         ItemStack icon = new ItemStack(Material.GRAY_DYE);
-        name(icon, ChatColor.GRAY + "" + ChatColor.BOLD + "Hour " + hour);
+        named(icon, ChatColor.GRAY + "" + ChatColor.BOLD + "Hour " + hour);
         List<String> lore = new ArrayList<>();
         String tag = hourTag(hour);
-        if (tag != null) {
-            lore.add(ChatColor.GRAY + ChatColor.stripColor(tag));
-        }
+        if (tag != null) lore.add(ChatColor.GRAY + ChatColor.stripColor(tag));
         Reward reward = this.rewards.playtimeRewardForHour(hour);
         if (reward != null) {
             for (String line : contentsLore(reward)) {
                 lore.add(ChatColor.GRAY + ChatColor.stripColor(line));
             }
         }
-        long left = Math.max(0L, hour - haveHours);
+        long left = Math.max(0L, hour - have);
         lore.add("");
-        lore.add(ChatColor.DARK_GRAY + "Reach " + hour + " online hours"
+        lore.add(ChatColor.DARK_GRAY + "Reach " + hour + " active hours"
                 + " (" + left + "h left)");
-        lore(lore, icon);
+        lore(icon, lore);
         return icon;
     }
 
-    /** Rare/finale markers. Null for ordinary milestones. */
     private static String hourTag(int hour) {
         if (hour == FINAL_HOUR) {
             return ChatColor.GOLD + "" + ChatColor.BOLD + "FINAL REWARD";
@@ -169,47 +212,34 @@ public final class PlaytimeRewardsGui implements Listener {
     }
 
     private ItemStack milestoneIcon(int hour, Reward reward) {
-        if (hour == FINAL_HOUR) {
-            return new ItemStack(Material.PURPLE_DYE);
-        }
-        if (PRIME_HOURS.contains(hour)) {
-            return new ItemStack(Material.LIGHT_BLUE_DYE);
-        }
+        if (hour == FINAL_HOUR) return new ItemStack(Material.PURPLE_DYE);
+        if (PRIME_HOURS.contains(hour)) return new ItemStack(Material.LIGHT_BLUE_DYE);
         return derivedIcon(reward);
     }
 
     private ItemStack infoItem(Player player) {
-        long haveHours = this.rewards.activeHours(player);
+        long have = this.rewards.activeHours(player);
         List<Integer> hours = this.rewards.playtimeMilestoneHours();
         int next = -1;
         for (int hour : hours) {
-            if (!this.rewards.playtimeHourClaimed(player, hour) && haveHours < hour) {
+            if (!this.rewards.playtimeHourClaimed(player, hour)) {
                 next = hour;
                 break;
-            }
-        }
-        // Next unclaimed regardless of reachability (may already be reachable).
-        if (next < 0) {
-            for (int hour : hours) {
-                if (!this.rewards.playtimeHourClaimed(player, hour)) {
-                    next = hour;
-                    break;
-                }
             }
         }
         ItemStack info = new ItemStack(Material.NETHER_STAR);
         List<String> lore = new ArrayList<>();
         if (this.rewards.playtimeCompleted(player)) {
-            name(info, ChatColor.GOLD + "" + ChatColor.BOLD + "Playtime Completed");
-            lore.add(ChatColor.GRAY + "All 41 milestones claimed!");
+            named(info, ChatColor.GOLD + "" + ChatColor.BOLD + "Playtime Completed");
+            lore.add(ChatColor.GRAY + "All " + hours.size() + " milestones claimed!");
         } else {
-            name(info, ChatColor.AQUA + "" + ChatColor.BOLD + "Total: "
-                    + RewardsModule.formatMinutes(haveHours * 60L));
+            named(info, ChatColor.AQUA + "" + ChatColor.BOLD + "Total: "
+                    + RewardsModule.formatMinutes(have * 60L));
             if (next > 0) {
+                long left = Math.max(0L, next - have);
                 lore.add(ChatColor.GRAY + "Next milestone: " + ChatColor.WHITE + "Hour " + next);
-                long left = Math.max(0L, next - haveHours);
                 lore.add(ChatColor.GRAY + "Progress: " + ChatColor.WHITE
-                        + RewardsModule.formatMinutes(haveHours * 60L)
+                        + RewardsModule.formatMinutes(have * 60L)
                         + ChatColor.GRAY + " / " + ChatColor.WHITE
                         + RewardsModule.formatMinutes((long) next * 60L)
                         + (left > 0 ? ChatColor.GRAY + " (" + left + "h left)" : ""));
@@ -217,42 +247,56 @@ public final class PlaytimeRewardsGui implements Listener {
                 lore.add(ChatColor.GRAY + "No milestones left.");
             }
         }
-        lore(lore, info);
+        lore(info, lore);
         return info;
     }
 
     private ItemStack claimAllButton(Player player) {
         List<Integer> hours = this.rewards.playtimeMilestoneHours();
-        long haveHours = this.rewards.activeHours(player);
+        long have = this.rewards.activeHours(player);
         int ready = 0;
         for (int hour : hours) {
-            if (!this.rewards.playtimeHourClaimed(player, hour) && haveHours >= hour) {
-                ready++;
-            }
+            if (!this.rewards.playtimeHourClaimed(player, hour) && have >= hour) ready++;
         }
         if (this.rewards.playtimeCompleted(player)) {
-            ItemStack done = named(Material.BARRIER, ChatColor.GOLD + "" + ChatColor.BOLD + "Completed");
-            List<String> lore = new ArrayList<>();
-            lore.add(ChatColor.GRAY + "All 41 milestones claimed!");
-            lore(lore, done);
-            return done;
+            return named(Material.BARRIER,
+                    ChatColor.GOLD + "" + ChatColor.BOLD + "COMPLETED",
+                    ChatColor.GRAY + "All " + hours.size() + " milestones claimed!");
         }
         if (ready > 0) {
-            ItemStack claim = named(Material.LIME_CONCRETE,
-                    ChatColor.GREEN + "" + ChatColor.BOLD + "CLAIM ALL (" + ready + ")");
-            List<String> lore = new ArrayList<>();
-            lore.add(ChatColor.GRAY + "Collect every reached milestone, in order");
-            lore.add("");
-            lore.add(ChatColor.GREEN + "" + ChatColor.BOLD + "Click to collect!");
-            lore(lore, claim);
-            glow(claim);
-            return claim;
+            return named(Material.ORANGE_DYE,
+                    ChatColor.GREEN + "" + ChatColor.BOLD + "CLAIM ALL (" + ready + ")",
+                    ChatColor.GRAY + "Collect every reached milestone, in order.",
+                    "",
+                    ChatColor.GREEN + "" + ChatColor.BOLD + "Click to collect!");
         }
-        ItemStack idle = named(Material.GRAY_CONCRETE, ChatColor.GRAY + "" + ChatColor.BOLD + "CLAIM ALL");
-        List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.DARK_GRAY + "Nothing ready right now.");
-        lore(lore, idle);
-        return idle;
+        return named(Material.GRAY_DYE,
+                ChatColor.GRAY + "" + ChatColor.BOLD + "NOTHING READY",
+                ChatColor.DARK_GRAY + "Keep playing to reach the next milestone.");
+    }
+
+    private ItemStack legend() {
+        return named(Material.BOOK,
+                ChatColor.AQUA + "" + ChatColor.BOLD + "How this works",
+                ChatColor.GRAY + "Milestones unlock at set playtime hours.",
+                ChatColor.GRAY + "This ladder never resets.",
+                "",
+                ChatColor.GREEN + "Lime" + ChatColor.GRAY + " = claimed",
+                ChatColor.YELLOW + "Orange" + ChatColor.GRAY + " = ready, click it",
+                ChatColor.GRAY + "Grey" + ChatColor.GRAY + " = not reached yet",
+                ChatColor.LIGHT_PURPLE + "Blue" + ChatColor.GRAY + " = rare",
+                ChatColor.GOLD + "Purple" + ChatColor.GRAY + " = final reward");
+    }
+
+    private ItemStack statsItem(Player player) {
+        return named(Material.CLOCK,
+                ChatColor.AQUA + "" + ChatColor.BOLD + "Your progress",
+                ChatColor.GRAY + "Active hours: " + ChatColor.WHITE
+                        + this.rewards.activeHours(player),
+                ChatColor.GRAY + "Milestones: " + ChatColor.WHITE
+                        + this.rewards.playtimeClaimedHours(player).size()
+                        + ChatColor.GRAY + " / " + this.rewards.playtimeMilestoneHours().size()
+                        + " claimed");
     }
 
     private List<String> contentsLore(Reward reward) {
@@ -285,88 +329,98 @@ public final class PlaytimeRewardsGui implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
-        if (!isOurs(event.getInventory())) return;
+        if (!holderOf(event.getInventory())) return;
         event.setCancelled(true);
         if (event.getClickedInventory() == null
-                || !event.getClickedInventory().equals(event.getInventory())) {
-            return;
-        }
+                || !event.getClickedInventory().equals(event.getInventory())) return;
         int slot = event.getRawSlot();
         if (slot < 0 || slot >= SIZE) return;
+
+        Holder holder = (Holder) event.getInventory().getHolder();
+
         if (slot == CLAIM_ALL_SLOT) {
             int paid = this.rewards.claimAllPlaytime(player);
             if (paid > 0) {
                 player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.2f);
-                refresh(player);
+                refresh(player, holder.page());
             } else {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.5f, 0.8f);
+                deny(player);
             }
             return;
         }
-        if (slot >= 9 && slot <= 49) {
-            int idx = slot - 9;
+        if (slot == PREV_SLOT) {
+            openPage(player, holder.page() - 1);
+            return;
+        }
+        if (slot == NEXT_SLOT) {
+            openPage(player, holder.page() + 1);
+            return;
+        }
+        for (int i = 0; i < PER_PAGE; i++) {
+            if (TIER_SLOTS[i] != slot) continue;
             List<Integer> hours = this.rewards.playtimeMilestoneHours();
-            if (idx < 0 || idx >= hours.size()) return;
-            int hour = hours.get(idx);
-            if (this.rewards.playtimeHourClaimed(player, hour)
-                    || this.rewards.playtimeCompleted(player)) {
-                return;
-            }
-            if (!this.rewards.playtimeHourReady(player, hour)) {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.5f, 0.8f);
+            int index = holder.page() * PER_PAGE + i;
+            if (index >= hours.size()) return;
+            int hour = hours.get(index);
+            if (this.rewards.playtimeCompleted(player)
+                    || this.rewards.playtimeHourClaimed(player, hour)
+                    || !this.rewards.playtimeHourReady(player, hour)) {
+                deny(player);
                 return;
             }
             if (this.rewards.claimPlaytimeHour(player, hour)) {
                 player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.2f);
-                refresh(player);
+                refresh(player, holder.page());
             } else {
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.5f, 0.8f);
+                deny(player);
             }
+            return;
         }
     }
 
-    private void refresh(Player player) {
+    private void deny(Player player) {
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.5f, 0.8f);
+    }
+
+    private void refresh(Player player, int page) {
         Inventory top = player.getOpenInventory() != null
                 ? player.getOpenInventory().getTopInventory() : null;
-        if (isOurs(top)) {
-            render(player, top);
+        if (holderOf(top)) {
+            render(player, top, page, pageCount());
         } else {
-            openGui(player);
+            openPage(player, page);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
-        if (isOurs(event.getInventory())) {
-            event.setCancelled(true);
-        }
+        if (holderOf(event.getInventory())) event.setCancelled(true);
     }
 
     /* ------------------------------------------------------------------ */
 
-    private static ItemStack named(Material mat, String name) {
+    private static ItemStack named(Material mat, String name, String... lore) {
         ItemStack stack = new ItemStack(mat);
-        name(stack, name);
+        named(stack, name);
+        List<String> l = new ArrayList<>();
+        for (String s : lore) l.add(s);
+        lore(stack, l);
         return stack;
     }
 
-    private static void name(ItemStack stack, String name) {
+    private static void named(ItemStack stack, String name) {
         ItemMeta meta = stack.getItemMeta();
         if (meta == null) return;
         meta.setDisplayName(UiKit.colour(name));
         stack.setItemMeta(meta);
     }
 
-    private static void lore(List<String> lore, ItemStack stack) {
+    private static void lore(ItemStack stack, List<String> lore) {
         ItemMeta meta = stack.getItemMeta();
         if (meta == null) return;
         List<String> out = new ArrayList<>();
         for (String line : lore) out.add(UiKit.colour(line));
         meta.setLore(out);
         stack.setItemMeta(meta);
-    }
-
-    private static void glow(ItemStack stack) {
-        UiKit.glow(stack);
     }
 }

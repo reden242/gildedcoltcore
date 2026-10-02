@@ -81,6 +81,26 @@ public final class ConfigUpdater {
     private static final String VERSION_KEY = "config-version";
 
     /**
+     * Sections forced back to the bundled template on every rebuild.
+     *
+     * <p>The carry loop above preserves anything the owner changed, on the
+     * theory that a changed value is a deliberate tuning choice. That is the
+     * right default and the wrong one for the reward ladders: they are game
+     * content, and a stale value there is not a preference but a bug that
+     * survives every upgrade. This is exactly what was observed - a live
+     * config carried {@code eco give %player% 250} for day 1, the rebuild
+     * preserved it as an owner edit, and the ladder shipped in the jar never
+     * reached the server no matter how many times the version was bumped.
+     *
+     * <p>Forcing the whole section (not individual leaves) also removes tiers
+     * that no longer exist, so a shortened ladder cannot survive a rebuild.
+     */
+    private static final List<String> TEMPLATE_OWNED_SECTIONS = List.of(
+            "daily-rewards.rewards",
+            "playtime-rewards.rewards"
+    );
+
+    /**
      * Settings that no longer exist and must not survive a rebuild.
      *
      * <p>The carry loop treats any key the template has never heard of as an
@@ -203,6 +223,32 @@ public final class ConfigUpdater {
         for (String key : template.getKeys(true)) {
             if (template.isConfigurationSection(key)) continue;
             if (!live.contains(key, true)) addedKeys++;
+        }
+
+        // Reward ladders are game content, not owner settings, so any value the
+        // carry loop preserved in them is dropped here in favour of the bundled
+        // table. Done after the carry loop, otherwise the carry would simply put
+        // the stale value straight back.
+        List<String> reset = new ArrayList<>();
+        for (String section : TEMPLATE_OWNED_SECTIONS) {
+            if (!live.contains(section, true)) continue;
+            ConfigurationSection stale = live.getConfigurationSection(section);
+            if (stale == null || stale.getKeys(false).isEmpty()) continue;
+            reset.add(section);
+        }
+        if (!reset.isEmpty()) {
+            // Rebuild these sections from scratch off the template.
+            for (String section : reset) {
+                template.set(section, null);
+            }
+            YamlConfiguration fresh = loadBundled(plugin);
+            if (fresh != null) {
+                for (String section : reset) {
+                    template.set(section, fresh.getConfigurationSection(section));
+                }
+            }
+            plugin.getLogger().warning("[Config] reset to the bundled ladder (these are "
+                    + "game content, your edited values were not kept): " + reset);
         }
 
         template.set(VERSION_KEY, CURRENT_VERSION);

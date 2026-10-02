@@ -98,11 +98,13 @@ public final class UiKit {
             if (lower.startsWith("eco give") && p.length >= 4) {
                 return "$" + p[3];
             }
-            // crate give %player% <type> [amount]  /  shard give %player% <amount>
+            // crate give %player% <type>_crate [amount]  /  shard give %player% <amount>
+            // The live command is `crate give <player> <type>_crate`, so the token
+            // already reads "common_crate" - do not append "Key" to it.
             if (lower.startsWith("crate give") && p.length >= 4) {
                 String type = p[3];
                 String amount = p.length >= 5 ? p[4] : "1";
-                return amount + "x " + titleCase(type) + " Key";
+                return amount + "x " + titleCase(type);
             }
             if (lower.startsWith("shard give") && p.length >= 3) {
                 String amount = p.length >= 4 ? p[3] : "1";
