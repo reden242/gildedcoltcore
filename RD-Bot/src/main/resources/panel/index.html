@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RD-Bot Panel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="boot"><div class="card"><h1>RD-Bot</h1><p id="boot-msg">Loading…</p></div></div>
+<div id="app" class="hidden">
+  <aside id="sidebar">
+    <div class="brand"><span class="dot"></span>RD-BOT</div>
+    <label class="guild-label" for="guild">Server</label>
+    <select id="guild"></select>
+    <nav id="nav">
+      <button data-page="kb" class="active">Knowledge Base</button>
+      <button data-page="insights">AI Insights</button>
+      <button data-page="escalations">Escalations</button>
+      <button data-page="hours">Working Hours</button>
+      <button data-page="personality">Bot Personality</button>
+      <button data-page="prompt">Prompt</button>
+      <button data-page="keys">API Keys &amp; Usage</button>
+      <button data-page="test">Test Chat</button>
+    </nav>
+    <button id="logout" class="ghost">Log out</button>
+  </aside>
+  <main id="main">
+
+    <section id="page-kb" class="page">
+      <h1>Knowledge Base</h1>
+      <p class="sub">Add information in the form of custom knowledge, websites, Discord channels, and documents. All sources work together, allowing the Bot to find the most relevant answer for each question.</p>
+      <div class="kb-layout">
+        <div class="kb-side">
+          <div class="kb-nav">
+            <button data-kind="custom" class="active">Server Knowledge</button>
+            <button data-kind="web">Web Sources</button>
+            <button data-kind="discord">Discord Sources</button>
+            <button data-kind="document">Document Sources</button>
+          </div>
+          <div class="card" id="usage-limits"><h3>Usage Limits</h3><div id="limits"></div></div>
+        </div>
+        <div class="kb-main">
+          <div id="kb-custom">
+            <div class="card">
+              <div class="row between"><div><h2>Server Knowledge</h2>
+              <p class="sub">Add important information, FAQs, or policies for the Bot to use when answering questions.</p></div>
+              <div><button id="kb-export" class="ghost">Export</button> <button id="kb-import-btn" class="ghost">Import</button>
+              <input type="file" id="kb-import-file" accept=".json" class="hidden"></div></div>
+              <label>Topic <span class="count" id="topic-count">0/200</span></label>
+              <input id="kb-topic" maxlength="200" placeholder="e.g. Billing, Pricing">
+              <label>Information <span class="count" id="info-count">0/5000</span></label>
+              <textarea id="kb-info" maxlength="5000" rows="5" placeholder="The factual information the AI should know..."></textarea>
+              <button id="kb-add" class="primary">+ Add</button>
+            </div>
+            <h3 id="kb-items-title">Knowledge Items (0)</h3>
+            <div id="kb-items"></div>
+          </div>
+          <div id="kb-web" class="hidden">
+            <div class="card"><h2>Web Sources</h2>
+            <p class="sub">Add URLs. The bot crawls the page text, chunks it and indexes it. Re-sync any time.</p>
+            <div class="row"><input id="web-url" placeholder="https://…"><button id="web-add" class="primary">+ Add URL</button></div></div>
+            <div id="web-items"></div>
+          </div>
+          <div id="kb-discord" class="hidden">
+            <div class="card"><h2>Discord Sources</h2>
+            <p class="sub">Pick FAQ or announcement channels. Their messages become knowledge, synced incrementally.</p>
+            <div class="row"><select id="discord-channel"></select><button id="discord-add" class="primary">+ Add channel</button>
+            <button id="discord-sync" class="ghost">Sync all</button></div></div>
+            <div id="discord-items"></div>
+          </div>
+          <div id="kb-document" class="hidden">
+            <div class="card"><h2>Document Sources</h2>
+            <p class="sub">Upload PDF, TXT or MD (max 5, 12 MB each). Text is extracted, chunked and indexed.</p>
+            <div class="row"><input type="file" id="doc-file" accept=".pdf,.txt,.md"><button id="doc-add" class="primary">+ Upload</button></div></div>
+            <div id="doc-items"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-insights" class="page hidden">
+      <div class="row between"><div><h1>AI Insights</h1>
+      <p class="sub">Every AI-generated response with confidence scores, knowledge sources used, and links back to Discord.</p></div>
+      <div><button id="insights-refresh" class="ghost">Refresh</button></div></div>
+      <div class="row">
+        <select id="insights-filter"><option value="">All</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="escalated">Escalated</option></select>
+      </div>
+      <div id="insights"></div>
+    </section>
+
+    <section id="page-escalations" class="page hidden">
+      <h1>Escalations</h1>
+      <p class="sub">Configure when the AI should ask for staff help, how it handles uncertain questions, and review recent escalations.</p>
+      <div class="tabs"><button data-tab="settings" class="active">Settings</button><button data-tab="recent">Recent Escalations</button></div>
+      <div id="esc-settings">
+        <div class="card"><h3>Escalation Ping Role</h3>
+          <p class="sub">When a ticket is escalated, this role will be mentioned in the ticket channel.</p>
+          <input id="esc-role" placeholder="Role ID (empty = none)"></div>
+        <div class="card"><h3>When should the AI escalate?</h3>
+          <p class="sub">Choose how confident the AI should be before answering on its own. If it isn't confident enough, it will escalate to a staff member instead.</p>
+          <label class="radio"><input type="radio" name="preset" value="conservative"> <b>Conservative</b> — escalate more often, the AI asks for help unless it's very confident.</label>
+          <label class="radio"><input type="radio" name="preset" value="balanced" checked> <b>Balanced (Recommended)</b> — a good middle ground, the AI answers when it has good confidence.</label>
+          <label class="radio"><input type="radio" name="preset" value="autonomous"> <b>Autonomous</b> — escalate less often, the AI tries to answer on its own more.</label>
+          <label>Answer threshold (0–1, overrides the preset) <input id="esc-threshold" type="number" min="0" max="1" step="0.05" placeholder="e.g. 0.65"></label></div>
+        <div class="card"><h3>If the AI doesn't know the answer...</h3>
+          <p class="sub">Decide what happens when someone asks a question that isn't covered by your Knowledge Base.</p>
+          <label class="radio"><input type="radio" name="unknown" value="escalate" checked> <b>Always Escalate Topics (Recommended)</b> — the AI asks a staff member to help instead of guessing.</label>
+          <label class="radio"><input type="radio" name="unknown" value="external-knowledge"> <b>Answer Using AI External Knowledge</b> — the AI answers using its general knowledge, which may not match your server's information.</label></div>
+        <div class="card"><h3>After an escalation...</h3>
+          <p class="sub">When the AI escalates a conversation, it can either keep replying normally or go quiet for that user in that channel until staff handle it.</p>
+          <label class="radio"><input type="radio" name="after" value="stop" checked> <b>Stop replying after an escalation (Recommended)</b> — the bot ignores further messages from that user in that channel until the escalation is archived.</label>
+          <label class="radio"><input type="radio" name="after" value="keep"> <b>Keep replying normally</b> — useful if you want the bot to keep asking clarifying questions while staff review.</label></div>
+        <div class="card"><h3>Max Replies Per Ticket</h3>
+          <p class="sub">Limit how many times the AI may reply inside a single ticket. Once the limit is reached the bot stops replying and escalates.</p>
+          <label class="radio"><input type="radio" name="maxreplies" value="off" checked> Off (default)</label>
+          <label class="radio"><input type="radio" name="maxreplies" value="on"> On, limit: <input id="maxreplies-n" type="number" min="1" max="50" value="10"></label></div>
+        <button id="esc-save" class="primary">Save escalation settings</button>
+      </div>
+      <div id="esc-recent" class="hidden"><div id="escs"></div></div>
+    </section>
+
+    <section id="page-hours" class="page hidden">
+      <div class="row between"><div><h1>Working Hours</h1></div><span id="hours-chip" class="chip">∞ 24/7</span></div>
+      <p class="sub">Control when the bot responds to messages. By default the bot runs 24/7. Switch to 'Only during working hours' to keep it inside a weekly schedule. Outside those hours the bot stays silent: it does not reply, no credits are spent and no AI is used.</p>
+      <p class="sub" id="hours-info">Working hours are disabled. The bot is available 24/7.</p>
+      <div class="card"><h3>Bot Availability</h3>
+        <p class="sub">Choose whether the bot is always available or restricted to your weekly schedule. Turning working hours off keeps your schedule saved for later.</p>
+        <label class="radio card-radio"><input type="radio" name="hoursmode" value="always" checked> <b>Always available (24/7)</b> — the bot answers any time, day or night. This is the default behaviour.</label>
+        <label class="radio card-radio"><input type="radio" name="hoursmode" value="scheduled"> <b>Only during working hours</b> — outside this schedule the bot stays silent, no replies and no AI used.</label></div>
+      <div id="hours-detail" class="hidden">
+        <div class="card"><h3>Timezone, Schedule &amp; Out-of-Hours Ping</h3>
+          <label>Timezone (IANA) <input id="hours-tz" placeholder="UTC" value="UTC"></label>
+          <div id="schedule"></div>
+          <label>Out-of-hours ping role ID <input id="hours-role" placeholder="empty = no ping"></label>
+          <label>Offline message<textarea id="hours-msg" rows="2"></textarea></label></div>
+      </div>
+      <button id="hours-save" class="primary">Save working hours</button>
+    </section>
+
+    <section id="page-personality" class="page hidden">
+      <h1>Bot Personality</h1>
+      <p class="sub">Customize how your AI communicates with members. Adjust its personality, response style, language, and the information it should always keep in mind while helping your community.</p>
+      <div class="card"><h3>Bot Appearance</h3><p class="sub">Nickname and avatar are applied per server where Discord allows it.</p>
+        <div class="row"><div><label>Nickname</label><input id="p-nick" value="RD-Bot"></div>
+        <div><label>Bio</label><input id="p-bio" placeholder="No bio set"></div></div></div>
+      <div class="card"><h3>Identity</h3><p class="sub">Choose how the AI should sound when talking to your members.</p>
+        <div class="tone-grid" id="tones">
+          <button data-tone="Professional">Professional<span>Formal, professional, and straight to the point.</span></button>
+          <button data-tone="Friendly" class="active">Friendly<span>Warm, approachable, and helpful.</span></button>
+          <button data-tone="Casual">Casual<span>Relaxed and conversational.</span></button>
+          <button data-tone="Technical">Technical<span>Uses technical language and detailed explanations.</span></button>
+        </div>
+        <label>Additional personality instructions <span class="count" id="extra-count">0/1000</span></label>
+        <textarea id="p-extra" maxlength="1000" rows="2" placeholder="e.g. Be enthusiastic and use emojis."></textarea>
+        <label>Reply Language</label>
+        <label class="radio"><input type="radio" name="lang" value="Auto-detect" checked> Auto-detect — reply in the same language as the user.</label>
+        <label class="radio"><input type="radio" name="lang" value="force"> Force a language <select id="p-langsel"><option>English</option><option>German</option><option>French</option><option>Spanish</option><option>Dutch</option></select></label></div>
+      <div class="card"><h3>Server Context</h3><p class="sub">Information the AI should always remember when helping members.</p>
+        <label>Server description <span class="count" id="sd-count">0/1000</span></label>
+        <textarea id="p-desc" maxlength="1000" rows="2" placeholder="e.g. This is the official support server for Acme SaaS, a project management tool for freelancers."></textarea>
+        <label>Server rules summary <span class="count" id="sr-count">0/1000</span></label>
+        <textarea id="p-rules" maxlength="1000" rows="2" placeholder="e.g. No sharing account credentials. Be respectful. No spam."></textarea>
+        <label>What the bot should never do <span class="count" id="nd-count">0/1000</span></label>
+        <textarea id="p-never" maxlength="1000" rows="2" placeholder="e.g. Never promise refunds. Never discuss competitor products. Never promise upcoming features."></textarea>
+        <label>Escalate to Staff (one per line) <span class="count" id="et-count">0/1000</span></label>
+        <textarea id="p-escalate" maxlength="1000" rows="4" placeholder="e.g. Billing disputes, account bans, legal questions"></textarea></div>
+      <div class="card"><h3>Response Behavior</h3><p class="sub">Choose how detailed the AI's replies should be.</p>
+        <label class="radio"><input type="radio" name="detail" value="concise"> <b>Concise</b> — short answers, 1–3 sentences.</label>
+        <label class="radio"><input type="radio" name="detail" value="balanced" checked> <b>Balanced</b> — a good balance between short and detailed.</label>
+        <label class="radio"><input type="radio" name="detail" value="detailed"> <b>Detailed</b> — thorough answers with clear structure.</label></div>
+      <button id="p-save" class="primary">Save personality</button>
+    </section>
+
+    <section id="page-prompt" class="page hidden">
+      <h1>Prompt</h1>
+      <p class="sub">The base system prompt for every request, sent as plain text. Saved to <code>prompt.md</code> and hot-reloaded. Supports <code>{{placeholders}}</code> filled from the values below.</p>
+      <div class="card"><textarea id="prompt-text" rows="24" spellcheck="false"></textarea>
+      <h3>Placeholders</h3>
+      <div class="row"><input id="ph-server-ip" placeholder="server_ip"><input id="ph-server-name" placeholder="server_name"><input id="ph-server-desc" placeholder="server_description"><input id="ph-staff-role" placeholder="staff_role"></div>
+      <button id="prompt-save" class="primary">Save prompt.md</button></div>
+    </section>
+
+    <section id="page-keys" class="page hidden">
+      <h1>API Keys &amp; Usage</h1>
+      <p class="sub">Load is spread across keys per guild (sticky least-loaded assignment). Keys are configured in <code>config.yml</code> or environment variables — only the last 4 characters are ever shown here.</p>
+      <button id="keys-refresh" class="ghost">Refresh</button>
+      <div id="keys"></div>
+    </section>
+
+    <section id="page-test" class="page hidden">
+      <h1>Test Chat</h1>
+      <p class="sub">Try the AI exactly as it runs in Discord: confidence, sources and escalation details included.</p>
+      <div class="card"><div id="chat-log"></div>
+        <div class="row"><input id="chat-input" placeholder="Ask something…"><button id="chat-send" class="primary">Send</button></div></div>
+    </section>
+
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

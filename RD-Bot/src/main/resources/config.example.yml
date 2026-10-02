@@ -1,0 +1,156 @@
+# ---------------------------------------------------------------------------
+# rdbot configuration
+# Copy to config.yml. Secrets may also come from environment variables:
+#   RDBOT_BOT_TOKEN, RDBOT_GROQ_KEY_1, RDBOT_GROQ_KEY_2, ...
+# Environment values always win over file values.
+# ---------------------------------------------------------------------------
+
+discord:
+  # Discord bot token (https://discord.com/developers/applications)
+  token: ""
+  # Application/owner id: used by /panel-token regenerate (owner-only)
+  owner-id: ""
+
+  # Intents the bot needs: Guilds, Guild Messages and Message Content.
+  # Enable "MESSAGE CONTENT INTENT" in the Developer Portal -> Bot page.
+  # ------------------------------------------------------------------
+  # Ticket detection (Tickets v2). Any combination may be used.
+  tickets:
+    # Channels whose PARENT CATEGORY id is listed here are tickets.
+    category-ids: []
+    # Per-server override: guild id -> category ids. Panel-saved
+    # ticketCategories still win over both of these.
+    guild-categories:
+      "1519338732665307227":
+        - "1544654152582299660"
+      "1505554874413350992":
+        - "1505882773318275123"
+        - "1505882747393277974"
+        - "1505882635447046227"
+    # Channels whose name starts with any of these prefixes are tickets.
+    channel-prefixes: ["ticket-"]
+    # Channels whose topic contains any of these keywords are tickets.
+    topic-keywords: ["ticket"]
+    # Ignore the bot's own messages (always true in practice).
+    ignore-bots: true
+    # Ignore messages from anyone with a staff role (see staff-role-ids).
+    ignore-staff: true
+    # Once a staff member replies in a channel, pause the bot there.
+    pause-on-staff-reply: true
+    # Staff roles treated as "staff" for the checks above.
+    staff-role-ids: []
+
+  # Roles
+  escalation-role-id: ""     # pinged on escalation (panel can override per guild)
+  gaps-channel-id: ""        # knowledge-gap embeds
+  log-channel-id: ""         # escalation logs + insight links
+
+  # Reply behaviour
+  # Bot display name is RD-Bot (set as the bot nickname in Discord or the
+  # panel's Bot Appearance page).
+  reply-footer: "Made by mtyri with love :heart:"  # empty string = no footer
+  cite-sources: true         # "Sources: ..." line under each answer
+  typing-indicator: true
+
+ai:
+  base-url: "https://api.groq.com/openai/v1"
+  # Pool of Groq API keys. Load is spread across them per guild.
+  keys: []
+  #  - "gsk_..."
+  # Optional explicit mapping: guild id -> key indexes (0-based) in the pool.
+  # Unlisted guilds get the least-loaded key (sticky).
+  guild-keys: {}
+
+  model: "llama-3.1-8b-instant"          # fast default
+  fallback-model: "llama-3.3-70b-versatile"  # stronger, used on failure
+  temperature: 0.2
+  max-tokens: 700
+  timeout-seconds: 30
+
+  # Per-key limits (small queue, cool-down on 429/5xx)
+  requests-per-minute: 30
+  tokens-per-minute: 60000
+
+  # Ticket memory
+  history-messages: 8        # last N ticket messages kept in the prompt
+  top-k: 4                   # knowledge chunks retrieved per question
+  cache-seconds: 60          # identical question cache per guild
+  user-cooldown-seconds: 8   # per-user reply cooldown
+  max-message-length: 1200
+
+  # Confidence thresholds (0.0 - 1.0). The panel's
+  # Conservative / Balanced / Autonomous presets write these.
+  confidence-high: 0.80
+  confidence-medium: 0.50
+  # Preset currently selected: conservative | balanced | autonomous
+  escalation-preset: balanced
+
+  # What to do when the knowledge base has nothing:
+  #   escalate      -> ask staff (recommended)
+  #   external-knowledge -> let the model answer from general knowledge
+  unknown-topic-policy: escalate
+
+  # After escalating: stop | keep
+  after-escalation: stop
+
+  # Max AI replies per ticket (0 = unlimited)
+  max-replies-per-ticket: 0
+
+knowledge:
+  # Panel usage limits (per guild)
+  limits:
+    custom: 20
+    web: 10
+    discord: 10
+    files: 5
+  # Chunk size for retrieval, characters
+  chunk-size: 700
+  # Re-sync web sources every N minutes (0 = manual only)
+  web-resync-minutes: 0
+
+panel:
+  enabled: true
+  port: 12022
+  # Bind address. Default all interfaces; put behind a reverse proxy for HTTPS.
+  bind: "0.0.0.0"
+  # Public URL of this panel, used for the /panel DM links. Must be reachable
+  # from the admin's machine, so use the server IP/domain, NOT localhost.
+  # The port above must be open in the firewall for the link to work.
+  public-base-url: ""
+  # User ids that may use every command and request a panel link via /panel.
+  # (Owner in discord.owner-id always qualifies.)
+  admin-user-ids:
+    - "1461245045435924632"
+    - "1493528758534144001"
+    - "1434546025112146100"
+    - "1504346340367405136"
+  # Optional IP allowlist; empty = anyone (token still required).
+  ip-allowlist: []
+  # Failed-auth attempts per IP before a temporary ban.
+  max-auth-failures: 8
+  ban-seconds: 300
+  # Panel tokens are generated on first start and printed once in the console.
+  # Only the SHA-256 hash is stored (panel-tokens.json). Rotate with
+  # /panel-token regenerate.
+  cookie-days: 30
+
+paths:
+  database: "rdbot.db"
+  prompt-file: "prompt.md"
+  panel-tokens: "panel-tokens.json"
+
+working-hours:
+  # always | scheduled
+  mode: always
+  timezone: "UTC"
+  # weekday -> list of ["HH:mm", "HH:mm"] ranges, 0 = Sunday
+  schedule:
+    "1": [["09:00", "18:00"]]
+    "2": [["09:00", "18:00"]]
+    "3": [["09:00", "18:00"]]
+    "4": [["09:00", "18:00"]]
+    "5": [["09:00", "18:00"]]
+  # Role pinged with a single "we're offline" message outside the schedule.
+  out-of-hours-role-id: ""
+  offline-message: "We're outside working hours. A staff member will reply when we're back online."
+

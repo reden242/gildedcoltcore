@@ -113,7 +113,7 @@ public final class DailyRewardsGui implements Listener {
     }
 
     private ItemStack claimedDay(int day, Reward reward) {
-        ItemStack icon = new ItemStack(Material.GREEN_STAINED_GLASS_PANE);
+        ItemStack icon = new ItemStack(Material.LIME_DYE);
         name(icon, ChatColor.GREEN + "" + ChatColor.BOLD + "Day " + day);
         List<String> lore = contentsLore(reward);
         lore.add("");
@@ -137,7 +137,7 @@ public final class DailyRewardsGui implements Listener {
     }
 
     private ItemStack lockedDay(int day, Reward reward) {
-        ItemStack icon = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemStack icon = new ItemStack(Material.GRAY_DYE);
         name(icon, ChatColor.GRAY + "" + ChatColor.BOLD + "Day " + day);
         List<String> lore = reward == null ? new ArrayList<>() : contentsLore(reward);
         // Preview in gray so future rewards read as locked, not payable.
@@ -150,10 +150,10 @@ public final class DailyRewardsGui implements Listener {
 
     private ItemStack dayIcon(int day, Reward reward) {
         if (day == 30) {
-            return new ItemStack(Material.BEACON);
+            return new ItemStack(Material.PURPLE_DYE);
         }
         if (MILESTONE_DAYS.contains(day)) {
-            return new ItemStack(Material.EMERALD_BLOCK);
+            return new ItemStack(Material.LIGHT_BLUE_DYE);
         }
         return derivedIcon(reward);
     }
@@ -221,7 +221,7 @@ public final class DailyRewardsGui implements Listener {
     private List<String> contentsLore(Reward reward) {
         List<String> out = new ArrayList<>();
         for (String command : reward.commands()) {
-            out.add(ChatColor.GRAY + humanize(command));
+            out.add(ChatColor.GRAY + UiKit.rewardLine(command));
         }
         return out;
     }
@@ -241,38 +241,6 @@ public final class DailyRewardsGui implements Listener {
             }
         }
         return new ItemStack(Material.CHEST);
-    }
-
-    private String humanize(String command) {
-        try {
-            String c = command.trim();
-            String lower = c.toLowerCase(Locale.ROOT);
-            String[] parts = c.split(" ");
-            if (lower.startsWith("eco give") && parts.length >= 4) {
-                return "$" + parts[3];
-            }
-            if ((lower.startsWith("crate give") || lower.startsWith("shard give")) && parts.length >= 4) {
-                String what = parts[2];
-                String amount = parts.length >= 5 ? parts[4] : parts[3];
-                if (lower.startsWith("crate")) {
-                    return amount + "x " + capitalize(what) + " Key";
-                }
-                return amount + "x " + capitalize(what);
-            }
-            if (lower.startsWith("give ") && parts.length >= 4) {
-                return parts[3] + "x " + capitalize(parts[2]);
-            }
-        } catch (Exception e) {
-            // fall through
-        }
-        return command.replace("%player%", "").trim();
-    }
-
-    private String capitalize(String s) {
-        if (s == null || s.isEmpty()) return s;
-        String clean = s.replace('_', ' ').toLowerCase(Locale.ROOT).trim();
-        if (clean.isEmpty()) return s;
-        return Character.toUpperCase(clean.charAt(0)) + clean.substring(1);
     }
 
     /* ------------------------------------------------------------------ */

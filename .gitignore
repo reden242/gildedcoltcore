@@ -49,6 +49,32 @@
 !GildedCore-final/src/main/resources/
 !GildedCore-final/src/main/resources/**
 !GildedCore-final/pom.xml
+# RD-Bot: standalone Discord support bot, now shipped as a Paper plugin. Same
+# allow-list treatment as the two plugin trees - it is a real Maven project, not
+# scratch. config.yml, rdbot.db and panel-tokens.json are runtime files and stay
+# out (the allow-list below only names the example config and the sources).
+!RD-Bot/
+!RD-Bot/src/
+!RD-Bot/src/main/
+!RD-Bot/src/main/java/
+!RD-Bot/src/main/java/dev/
+!RD-Bot/src/main/java/dev/rdbot/
+!RD-Bot/src/main/java/dev/rdbot/*.java
+!RD-Bot/src/main/java/dev/rdbot/ai/
+!RD-Bot/src/main/java/dev/rdbot/ai/*.java
+!RD-Bot/src/main/java/dev/rdbot/discord/
+!RD-Bot/src/main/java/dev/rdbot/discord/*.java
+!RD-Bot/src/main/java/dev/rdbot/kb/
+!RD-Bot/src/main/java/dev/rdbot/kb/*.java
+!RD-Bot/src/main/java/dev/rdbot/store/
+!RD-Bot/src/main/java/dev/rdbot/store/*.java
+!RD-Bot/src/main/java/dev/rdbot/web/
+!RD-Bot/src/main/java/dev/rdbot/web/*.java
+!RD-Bot/src/main/resources/
+!RD-Bot/src/main/resources/**
+!RD-Bot/pom.xml
+!RD-Bot/README.md
+!RD-Bot/config.example.yml
 !antiad/
 !antiad/*.py
 !antiad/*.java

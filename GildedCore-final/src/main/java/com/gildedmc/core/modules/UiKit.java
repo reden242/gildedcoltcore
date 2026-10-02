@@ -71,6 +71,68 @@ public final class UiKit {
         return ChatColor.translateAlternateColorCodes('&', out.toString());
     }
 
+    /* ------------------------------------------------------------------ */
+    /*  Reward lines                                                       */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Turns one reward command into a short player-facing line.
+     *
+     * <p>The reward commands are all {@code <thing> give %player% <args>}, so
+     * the placeholder sits at index 2 and shifts every real argument one slot
+     * to the right. Reading index 2 as the item is the bug this replaces: it
+     * printed "1x %player% Key" for {@code crate give %player% gold 1}. There
+     * was a private copy of this in both reward GUIs, which is how the two
+     * drifted apart.
+     *
+     * <p>Anything unrecognised is echoed with the placeholder stripped, so a new
+     * command form is visible rather than silently blank.
+     */
+    public static String rewardLine(String command) {
+        if (command == null) return "";
+        String text = command.trim();
+        try {
+            String lower = text.toLowerCase(Locale.ROOT);
+            String[] p = text.split("\\s+");
+            // eco give %player% <amount>
+            if (lower.startsWith("eco give") && p.length >= 4) {
+                return "$" + p[3];
+            }
+            // crate give %player% <type> [amount]  /  shard give %player% <amount>
+            if (lower.startsWith("crate give") && p.length >= 4) {
+                String type = p[3];
+                String amount = p.length >= 5 ? p[4] : "1";
+                return amount + "x " + titleCase(type) + " Key";
+            }
+            if (lower.startsWith("shard give") && p.length >= 3) {
+                String amount = p.length >= 4 ? p[3] : "1";
+                return amount + "x Shard" + ("1".equals(amount) ? "" : "s");
+            }
+            // give %player% <material> [amount]
+            if (lower.startsWith("give ") && p.length >= 4) {
+                String material = p[2];
+                String amount = p.length >= 4 ? p[3] : "1";
+                return amount + "x " + titleCase(material);
+            }
+        } catch (RuntimeException ignored) {
+            // fall through to the raw echo
+        }
+        return text.replace("%player%", "").replaceAll("\\s+", " ").trim();
+    }
+
+    /** {@code amethyst} / {@code crimson_key} to {@code Amethyst} / {@code Crimson Key}. */
+    private static String titleCase(String token) {
+        if (token == null || token.isEmpty()) return "";
+        String[] words = token.replace('_', ' ').toLowerCase(Locale.ROOT).trim().split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (String w : words) {
+            if (w.isEmpty()) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(Character.toUpperCase(w.charAt(0))).append(w, 1, w.length());
+        }
+        return sb.toString();
+    }
+
     public static String strip(String text) {
         return ChatColor.stripColor(colour(text));
     }

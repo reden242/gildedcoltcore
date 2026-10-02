@@ -1,0 +1,9 @@
+name: RD-Bot
+version: '1.0.0'
+main: dev.rdbot.RDBotPlugin
+api-version: '1.21'
+description: Discord support bot - Groq AI answers in tickets, knowledge base, web panel.
+author: rdbot
+website: https://discord.com/developers/applications
+# Nothing here is optional; the bot is self-contained.
+load: POSTWORLD

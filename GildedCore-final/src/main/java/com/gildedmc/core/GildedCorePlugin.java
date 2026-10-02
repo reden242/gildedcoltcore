@@ -897,21 +897,89 @@ implements Listener {
     }
 
     private void startReward(String label, String actor, String color, Runnable reward) {
-        int seconds = 5;
+        int seconds = Math.max(1, this.getConfig().getInt("rewards.countdown.seconds", 5));
         long introDelay = 30L;
+        boolean music = this.getConfig().getBoolean("rewards.countdown.music", true);
+        boolean finale = this.getConfig().getBoolean("rewards.countdown.finale", true);
+
         for (Player player : Bukkit.getOnlinePlayers()) {
             player.showTitle(Title.title(this.colorComponent(color + "&l" + label + " BY " + actor + "!!"), Component.empty(), Title.Times.times(Duration.ofMillis(250L), Duration.ofMillis(1000L), Duration.ofMillis(350L))));
         }
+
         for (int remaining = seconds; remaining >= 1; remaining--) {
             int shown = remaining;
+            int step = seconds - remaining;
             SchedulerCompat.runLater(this, () -> {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     player.showTitle(Title.title(this.colorComponent(color + "&l" + label), this.colorComponent("&fIn " + color + shown + "s"), Title.Times.times(Duration.ofMillis(100L), Duration.ofMillis(700L), Duration.ofMillis(200L))));
                     player.sendMessage(this.color(color + label + " &fin " + color + shown + "s&f."));
+                    if (music) this.countdownCue(player, shown, step, seconds);
                 }
-            }, introDelay + (seconds - remaining) * 20L);
+            }, introDelay + step * 20L);
         }
+
         SchedulerCompat.runLater(this, reward, introDelay + seconds * 20L);
+
+        // The dramatic tail runs after the payload so it lands on top of the
+        // rewards being handed out rather than under the last countdown tick.
+        if (finale) {
+            SchedulerCompat.runLater(this, () -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    this.finaleCue(player);
+                }
+            }, introDelay + seconds * 20L + 2L);
+        }
+    }
+
+    /**
+     * One countdown tick. The pitch climbs a semitone-ish per step so the last
+     * three seconds are audibly faster than the first, and the final tick is a
+     * bell rather than a harp note - the ear expects a change of instrument
+     * exactly when the number hits one.
+     */
+    private void countdownCue(Player player, int remaining, int step, int total) {
+        float pitch = 0.55F + (step * 0.22F);
+        Sound note = remaining == 1
+                ? Sound.BLOCK_NOTE_BLOCK_BELL
+                : Sound.BLOCK_NOTE_BLOCK_HARP;
+        player.playSound(player.getLocation(), note, 0.9F, Math.min(2.0F, pitch));
+        // A soft rising pad underneath the last three keeps the tension without
+        // adding another note on top of the melody.
+        if (remaining <= 3) {
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT,
+                    0.35F, Math.min(2.0F, pitch - 0.25F));
+        }
+        if (remaining == 1) {
+            player.playSound(player.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.6F, 1.6F);
+        }
+        if (total <= 0) {
+            player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.7F, 1.0F);
+        }
+    }
+
+    /**
+     * The payoff: a low hit, then an ascending arpeggio that resolves, then the
+     * dragon roar on top. Plays to everyone online regardless of who they are,
+     * because a server-wide giveaway that only the buyer hears is not a
+     * celebration.
+     */
+    private void finaleCue(Player player) {
+        org.bukkit.Location at = player.getLocation();
+        player.playSound(at, Sound.BLOCK_NOTE_BLOCK_BASEDRUM, 1.1F, 0.7F);
+        player.playSound(at, Sound.ENTITY_ENDER_DRAGON_GROWL, 0.45F, 1.25F);
+        float[] arpeggio = {0.6F, 0.8F, 1.0F, 1.2F, 1.5F, 2.0F};
+        for (int i = 0; i < arpeggio.length; i++) {
+            float pitch = arpeggio[i];
+            SchedulerCompat.runLater(this,
+                    () -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.8F, pitch),
+                    (long) i * 2L);
+        }
+        SchedulerCompat.runLater(this,
+                () -> player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_CHIME, 0.7F, 1.1F),
+                arpeggio.length * 2L + 2L);
+        SchedulerCompat.runLater(this,
+                () -> player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.6F, 1.4F),
+                arpeggio.length * 2L + 6L);
     }
 
     private void broadcastRewardSummary(String actor, String reward, int amount, int playerCount) {

@@ -34,7 +34,7 @@ import java.util.List;
  *   <li>It then attached comments to every bundled section. Calling
  *       {@code setComments} on a path that exists only in the defaults
  *       <em>creates</em> that path, so the save wrote out
- *       {@code local-ai: {}}, {@code combat-watch: {}}
+ *       {@code local-ai: {}}, {@code combat-watch: {}}, {@code offend: {types: {}}}
  *       and so on — empty sections that then shadowed the defaults and left the
  *       modules with no configuration at all.</li>
  * </ol>
@@ -45,7 +45,7 @@ import java.util.List;
  *
  * <h2>What survives a rebuild</h2>
  * Every value the owner actually set, including keys the template has never
- * heard of — custom AI providers, anything hand-added. What
+ * heard of — custom AI providers, extra offend types, anything hand-added. What
  * changes is the surrounding structure: comments, ordering and any newly added
  * keys all come from the template, so the file is always complete and always
  * documented.
@@ -62,8 +62,17 @@ public final class ConfigUpdater {
 
     private ConfigUpdater() { }
 
-    /** Bump this whenever a key is added to the bundled config.yml. */
-    public static final int CURRENT_VERSION = 45;
+    /**
+     * Bump this whenever a key is added to the bundled config.yml.
+     *
+     * <p>Must stay strictly greater than the {@code config-version} literal in
+     * that same bundled file, and it had drifted: the file shipped 45 while this
+     * was 42, so the {@code have >= CURRENT_VERSION} short-circuit always won
+     * and no rebuild could ever run. Setting the file and this constant to the
+     * same number and then bumping BOTH together is the only arrangement that
+     * works - a live file at the previous number is what triggers the rebuild.
+     */
+    public static final int CURRENT_VERSION = 46;
 
     private static final DateTimeFormatter STAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -93,7 +102,18 @@ public final class ConfigUpdater {
     private static final List<String> REMOVED_KEYS = List.of(
             "cheatdetector-loading",
             "anti-ad.llm",
-            "anti-ad.l3.min-call-gap-ms"
+            "anti-ad.l3.min-call-gap-ms",
+            // The playtime ladder was rebuilt from 6 coarse tiers to 41 named
+            // hour milestones. The old ids are not in the template, so the
+            // carry loop treats each as an owner customisation and keeps it -
+            // which left the live file with BOTH ladders and the GUI drawing
+            // whichever came first. Struck so only hour-N survives.
+            "playtime-rewards.rewards.first-hour",
+            "playtime-rewards.rewards.five-hours",
+            "playtime-rewards.rewards.ten-hours",
+            "playtime-rewards.rewards.twenty-five-hours",
+            "playtime-rewards.rewards.fifty-hours",
+            "playtime-rewards.rewards.hundred-hours"
     );
 
     /**
