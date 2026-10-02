@@ -1014,7 +1014,7 @@ public final class PlayerWipeModule implements Listener {
         UUID targetId = s.targetUuid != null ? parseUuidTarget(s.targetUuid) : parseUuidTarget(s.target);
         boolean offline = targetId != null && Bukkit.getPlayer(targetId) == null;
         if (offline && !commands.isEmpty() && this.queueOfflineWipes) {
-            if (this.syntheticLoad && SyntheticPlayerLoader.withLoadedPlayer(targetId, s.target, () -> {
+            if (this.syntheticLoad && SyntheticPlayerLoader.withLoadedPlayerHeld(this.plugin, targetId, s.target, 100L, () -> {
                 for (String cmd : commands) {
                     try {
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
@@ -1022,8 +1022,8 @@ public final class PlayerWipeModule implements Listener {
                     }
                 }
             })) {
-                staff.sendMessage(UiKit.colour("&aTarget loaded offline for the duration of the"
-                        + " wipe &7- &f" + commands.size() + " &acommand(s) applied and saved."));
+                staff.sendMessage(UiKit.colour("&aTarget loaded offline for 5s while its"
+                        + " data loads, then &f" + commands.size() + " &acommand(s) applied and saved."));
             } else {
                 QueuedWipe queued = queueWipe(targetId, s.target, s.label, commands);
                 if (queued != null) {

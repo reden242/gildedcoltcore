@@ -138,34 +138,12 @@ public final class VoteGui implements Listener {
         List<String> lore = new ArrayList<>();
         lore.add(UiKit.colour("&7Paid to every voter:"));
         for (String command : this.votes.rewardCommands()) {
-            lore.add(UiKit.colour("&f" + humanize(command)));
+            lore.add(UiKit.colour("&f" + UiKit.rewardLine(command)));
         }
         lore.add(" ");
         lore.add(UiKit.colour("&8Offline votes are queued and"));
         lore.add(UiKit.colour("&8paid on your next join."));
         return UiKit.item(Material.GOLD_INGOT, "&a&lVote Rewards", lore);
-    }
-
-    private String humanize(String command) {
-        try {
-            String c = command.trim();
-            String lower = c.toLowerCase(Locale.ROOT);
-            String[] parts = c.split(" ");
-            if (lower.startsWith("eco give") && parts.length >= 4) {
-                return "$" + parts[3];
-            }
-            if ((lower.startsWith("crate give") || lower.startsWith("shard give")) && parts.length >= 4) {
-                String what = parts[2];
-                String amount = parts.length >= 5 ? parts[4] : parts[3];
-                if (lower.startsWith("crate")) {
-                    return amount + "x " + what.replace('_', ' ') + " Key";
-                }
-                return amount + "x " + what.replace('_', ' ');
-            }
-        } catch (Exception ignored) {
-            // fall through
-        }
-        return command.replace("%player%", "").trim();
     }
 
     /* ------------------------------------------------------------------ */

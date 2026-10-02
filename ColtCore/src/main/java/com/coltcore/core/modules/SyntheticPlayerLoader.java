@@ -199,6 +199,41 @@ public final class SyntheticPlayerLoader {
         }
     }
 
+/**
+     * Loads the account now, holds it for the given ticks so its stored data
+     * finishes loading, then runs the work and removes it.
+     *
+     * <p>5 seconds (100 ticks) is enough for the data to load and short enough
+     * that the name never sits in the list. Running the work in the same tick
+     * as the load reads a half-loaded player, which is why the immediate
+     * {@link #withLoadedPlayer} form is wrong for wipes. Must be called on the
+     * main server thread; the work also runs on it.
+     *
+     * @return true when the account was placed and the work was scheduled
+     */
+    public static boolean withLoadedPlayerHeld(org.bukkit.plugin.java.JavaPlugin plugin,
+            UUID uuid, String name, long holdTicks, Runnable work) {
+        if (uuid == null || work == null || plugin == null) return false;
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getLogger().warning("[SyntheticPlayer] called off the main thread.");
+            return false;
+        }
+        Object handle = load(uuid, name);
+        if (handle == null) return false;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            IN_PROGRESS.set(Boolean.TRUE);
+            try {
+                work.run();
+            } catch (Throwable t) {
+                Bukkit.getLogger().warning("[SyntheticPlayer] work failed for " + name + ": " + t);
+            } finally {
+                unload(handle);
+                IN_PROGRESS.set(Boolean.FALSE);
+            }
+        }, Math.max(1L, holdTicks));
+        return true;
+    }
+
     /**
      * Loads the account, runs the work, then removes it again - all on the
      * calling main-thread tick, so the account is only ever in the player list
