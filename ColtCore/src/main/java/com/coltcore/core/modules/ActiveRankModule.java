@@ -75,6 +75,7 @@ public final class ActiveRankModule implements Listener {
     private FileConfiguration data;
     private final Set<String> granted = new LinkedHashSet<>();
     private SchedulerCompat.ManagedTask task;
+    private java.util.function.ToDoubleFunction<Player> hoursSource;
 
     public ActiveRankModule(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -175,11 +176,36 @@ public final class ActiveRankModule implements Listener {
 
     /** Hours this account has been on the server, from the server's own counter. */
     public double hours(Player p) {
+        // Prefer the tracked playtime the rewards module already maintains.
+        // Statistic.PLAY_ONE_MINUTE is server-owned and was rejected elsewhere in
+        // this codebase precisely because it does not reflect real playtime, so
+        // reading it here meant the threshold was never reached and the rank was
+        // never granted. Falls back to the statistic only when no source is
+        // wired, so the module still works standalone.
+        if (this.hoursSource != null) {
+            try {
+                double tracked = this.hoursSource.applyAsDouble(p);
+                if (tracked > 0.0D) return tracked;
+            } catch (Throwable ignored) {
+                // Fall through to the statistic.
+            }
+        }
         try {
             return p.getStatistic(Statistic.PLAY_ONE_MINUTE) / (double) TICKS_PER_HOUR;
         } catch (Exception ex) {
             return 0.0D;
         }
+    }
+
+    /**
+     * Supplies the authoritative playtime in hours.
+     *
+     * <p>Wired from the host to the rewards module's tracked total, which is the
+     * same number the rewards GUI shows, so a player reading "8h" in one menu and
+     * failing the threshold in another is not possible.
+     */
+    public void playtimeSource(java.util.function.ToDoubleFunction<Player> source) {
+        this.hoursSource = source;
     }
 
     /**

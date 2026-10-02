@@ -55,21 +55,17 @@ commands:
     description: Toggle announcements for yourself.
     usage: /announcements
     permission: coltcore.announcements
-  staffcode:
-    description: Generate a one-time staff action code.
-    usage: /staffcode
-    permission: coltcore.staffmanager
   promote:
-    description: Promote staff using a one-time code.
-    usage: /promote <player> [rank] <code>
+    description: Promote staff.
+    usage: /promote <player> [rank]
     permission: coltcore.staffmanager
   demote:
-    description: Demote staff using a one-time code.
-    usage: /demote <player> <code> [reason]
+    description: Demote staff.
+    usage: /demote <player> [reason]
     permission: coltcore.staffmanager
   hire:
-    description: Hire staff/media using a one-time code.
-    usage: /hire <player> [helper|media] <code>
+    description: Hire staff/media.
+    usage: /hire <player> [helper|media]
     permission: coltcore.staffmanager
   block:
     description: Toggle blocking a player in chat.

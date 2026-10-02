@@ -105,6 +105,14 @@ public final class RewardsModule implements Listener {
         this.data.set(key, this.data.getLong(key, 0L) + elapsed);
         String total = "players." + id + ".playtime.total-seconds";
         this.data.set(total, this.data.getLong(total, 0L) + elapsed);
+        // Re-arm the session so periodic flushes don't erase live time.
+        // onQuit also lands here, but a quitting player is already offline,
+        // so this only re-arms players who are actually still here.
+        Player online = Bukkit.getPlayer(id);
+        if (online != null && online.isOnline()) {
+            this.sessionStart.put(id, System.currentTimeMillis());
+            this.sessionDate.put(id, today().toString());
+        }
     }
 
     private void flushAll() {
@@ -423,9 +431,9 @@ public final class RewardsModule implements Listener {
         return this.data.getBoolean(base(player) + ".playtime.claimed." + rewardId, false);
     }
 
-    /** True when the player has enough hours for this tier and it is unpaid. */
+    /** True when the player has enough minutes for this tier and it is unpaid. */
     public boolean playtimeTierReady(Player player, Reward reward) {
-        return playtimeHours(player) >= reward.threshold
+        return playtimeMinutes(player) >= reward.threshold
                 && !playtimeTierClaimed(player, reward.id);
     }
 
@@ -434,20 +442,448 @@ public final class RewardsModule implements Listener {
             if (tell) player.sendMessage(ChatColor.RED + "Playtime rewards are disabled.");
             return 0;
         }
-        long hours = playtimeHours(player);
+        long minutes = playtimeMinutes(player);
         String base = base(player) + ".playtime.claimed";
         int claimed = 0;
         for (Reward reward : playtimeRewards()) {
-            if (hours < reward.threshold || this.data.getBoolean(base + "." + reward.id, false)) continue;
-            execute(player, reward, 0, hours);
+            if (minutes < reward.threshold || this.data.getBoolean(base + "." + reward.id, false)) continue;
+            execute(player, reward, 0, playtimeHours(player));
             this.data.set(base + "." + reward.id, true);
             claimed++;
             if (tell) player.sendMessage(ChatColor.GREEN + "Claimed playtime reward " + ChatColor.WHITE + reward.id
-                    + ChatColor.GREEN + " (" + reward.threshold + "h).");
+                    + ChatColor.GREEN + " (" + formatMinutes(reward.threshold) + ").");
         }
         if (claimed > 0) save();
         else if (tell) player.sendMessage(ChatColor.YELLOW + "You have no playtime rewards ready to claim.");
         return claimed;
+    }
+
+    /**
+     * Claims one playtime tier from the GUI. Returns true when paid.
+     * Uses the same keys as {@link #claimPlaytime} so text and GUI claims
+     * can never double-pay.
+     */
+    public boolean claimPlaytimeTier(Player player, String rewardId) {
+        if (!this.plugin.getConfig().getBoolean("playtime-rewards.enabled", true)) {
+            return false;
+        }
+        Reward found = null;
+        for (Reward reward : playtimeRewards()) {
+            if (reward.id.equals(rewardId)) {
+                found = reward;
+                break;
+            }
+        }
+        if (found == null || !playtimeTierReady(player, found)) {
+            return false;
+        }
+        execute(player, found, 0, playtimeHours(player));
+        this.data.set(base(player) + ".playtime.claimed." + found.id, true);
+        save();
+        return true;
+    }
+
+    /**
+     * Claims today's daily reward from the GUI (single day, no back-claim
+     * sweep). Returns true when paid. Mirrors the newest-date branch of
+     * {@link #claimDaily} so text and GUI claims share one streak.
+     */
+    public boolean claimCurrentDay(Player player) {
+        if (!this.plugin.getConfig().getBoolean("daily-rewards.enabled", true)) {
+            return false;
+        }
+        LocalDate today = today();
+        long need = minimumOnlineSeconds();
+        long have = onlineSeconds(player.getUniqueId(), today);
+        if (have < need || dailyClaimedToday(player)) {
+            return false;
+        }
+        String lastClaimed = newestClaimedDate(player);
+        int old = this.data.getInt(base(player) + ".daily.streak", 0);
+        int day = today.minusDays(1).toString().equals(lastClaimed) ? old + 1 : 1;
+        Reward reward = dailyReward(Math.max(1, day));
+        if (reward == null) {
+            return false;
+        }
+        execute(player, reward, day, playtimeHours(player));
+        this.data.set(base(player) + ".daily.claims." + today, true);
+        this.data.set(base(player) + ".daily.streak", day);
+        this.data.set(base(player) + ".daily.last-date", today.toString());
+        save();
+        return true;
+    }
+
+    /* ================================================================== */
+    /*  V2 model: next-day pointer, pending queue, completion flags, all    */
+    /*  driven by online seconds already tracked in rewards.yml (join/quit */
+    /*  + 60s flush). No separate AFK tracker: AntibotGuard remains the    */
+    /*  anti-farming gate at claim time. One-time migration maps the       */
+    /*  legacy streak onto next_day so nobody loses progress.               */
+    /* ================================================================== */
+
+    private static final int MAX_DAILY_DAY = 30;
+    private static final int MAX_PLAYTIME_HOUR = 200;
+    private static final long CLAIM_LOCK_MILLIS = 2000L;
+
+    private final Map<UUID, Long> claimLock = new ConcurrentHashMap<>();
+
+    private String v2base(Player player) {
+        return base(player);
+    }
+
+    private String v2base(UUID id) {
+        return "players." + id;
+    }
+
+    /** Online seconds today (rewards.yml bucket + live session). */
+    public long activeToday(UUID id) {
+        return onlineSeconds(id, today());
+    }
+
+    /** Lifetime online seconds (rewards.yml total + live session). */
+    public long activeTotal(UUID id) {
+        if (this.data == null) return 0L;
+        long seconds = this.data.getLong("players." + id + ".playtime.total-seconds", 0L);
+        Long started = this.sessionStart.get(id);
+        if (started != null) seconds += (System.currentTimeMillis() - started) / 1000L;
+        return seconds;
+    }
+
+    /** Whole online hours for milestones. */
+    public long activeHours(Player player) {
+        return activeTotal(player.getUniqueId()) / 3600L;
+    }
+
+    /** Seconds of online play needed for a day to qualify (config, default 600). */
+    public long dailyQualifySeconds() {
+        return minimumOnlineSeconds();
+    }
+
+    private void migrateV2(Player player) {
+        String root = v2base(player) + ".daily.v2migrated";
+        if (this.data.getBoolean(root, false)) return;
+        int legacyStreak = this.data.getInt(v2base(player) + ".daily.streak", 0);
+        if (legacyStreak > 0) {
+            int next = Math.min(MAX_DAILY_DAY, legacyStreak + 1);
+            this.data.set(v2base(player) + ".daily.next_day", next);
+            String lastDate = this.data.getString(v2base(player) + ".daily.last-date", "");
+            // Carry the legacy date forward only when it is still inside the
+            // 3-day safety window. A weeks-old date imported as-is makes the
+            // first /dailyrewards after an upgrade fire a reset the player
+            // never earned; stale progress keeps the streak but not the clock.
+            if (!lastDate.isEmpty()) {
+                try {
+                    long gap = today().toEpochDay() - LocalDate.parse(lastDate).toEpochDay();
+                    if (gap > 0 && gap < 4) {
+                        this.data.set(v2base(player) + ".daily.last_qualified_date", lastDate);
+                    }
+                } catch (Exception ignored) {
+                    // Unparseable legacy value: keep streak, drop the clock.
+                }
+            }
+        }
+        this.data.set(root, true);
+        save();
+    }
+
+    public int dailyNextDay(Player player) {
+        migrateV2(player);
+        int next = this.data.getInt(v2base(player) + ".daily.next_day", 0);
+        if (next < 1 || next > MAX_DAILY_DAY) {
+            next = 1;
+            this.data.set(v2base(player) + ".daily.next_day", next);
+            save();
+        }
+        return next;
+    }
+
+    public int dailyPending(Player player) {
+        migrateV2(player);
+        return Math.max(0, this.data.getInt(v2base(player) + ".daily.pending", 0));
+    }
+
+    public boolean dailyCompleted(Player player) {
+        return this.data.getBoolean(v2base(player) + ".daily.completed", false);
+    }
+
+    public boolean playtimeCompleted(Player player) {
+        return this.data.getBoolean(v2base(player) + ".playtime.completed", false);
+    }
+
+    public LocalDate dailyLastQualified(Player player) {
+        migrateV2(player);
+        String s = this.data.getString(v2base(player) + ".daily.last_qualified_date", "");
+        if (s == null || s.isEmpty()) return null;
+        try {
+            return LocalDate.parse(s);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Full missed days excluding today (still in progress) when today is not
+     * yet qualified, or excluding nothing when it is. Drives the safety
+     * counter: safe while missed &lt; 3.
+     */
+    public int dailyMissedDays(Player player) {
+        LocalDate last = dailyLastQualified(player);
+        if (last == null) return 0;
+        LocalDate today = today();
+        String todayStr = today.toString();
+        String lastStr = last.toString();
+        if (lastStr.equals(todayStr)) return 0;
+        long gap = today.toEpochDay() - last.toEpochDay();
+        if (gap <= 0) return 0;
+        // Today still open and unqualified: don't count it as missed yet.
+        if (!todayStr.equals(this.data.getString(v2base(player) + ".daily.last_qualified_date", ""))) {
+            return (int) Math.max(0L, gap - 1L);
+        }
+        return (int) Math.max(0L, gap - 1L);
+    }
+
+    /** Days of safety left before a reset (3 - missed, floor 0). */
+    public int dailySafeDaysLeft(Player player) {
+        return Math.max(0, 3 - dailyMissedDays(player));
+    }
+
+    /**
+     * Lazy reset check. Runs on join, GUI open and qualification. A gap of 4+
+     * days since the last qualification means 3+ consecutive missed days:
+     * next_day returns to 1, pending clears, and the player is told.
+     * Returns true when a reset fired.
+     */
+    public boolean checkDailyReset(Player player) {
+        if (dailyCompleted(player)) return false;
+        LocalDate last = dailyLastQualified(player);
+        if (last == null) return false;
+        LocalDate today = today();
+        long gap = today.toEpochDay() - last.toEpochDay();
+        if (gap < 4) return false;
+        int wasDay = dailyNextDay(player);
+        int wasPending = dailyPending(player);
+        this.data.set(v2base(player) + ".daily.next_day", 1);
+        this.data.set(v2base(player) + ".daily.pending", 0);
+        save();
+        // Silent when there was nothing to lose: a fresh profile sitting on
+        // Day 1 with no pending claims has no streak that "reset".
+        if (wasDay > 1 || wasPending > 0) {
+            player.sendMessage(ChatColor.RED + "Your streak reset to Day 1 after 3 missed days.");
+        }
+        return true;
+    }
+
+    /**
+     * Marks today qualified when dailyQualifySeconds()+ online seconds are
+     * banked. Called lazily (join, GUI open) and by the periodic qualifier.
+     * Each call adds at most one pending day and refreshes
+     * last_qualified_date. Returns true on a new qualification.
+     */
+    public boolean qualifyDaily(Player player) {
+        if (dailyCompleted(player)) return false;
+        checkDailyReset(player);
+        LocalDate today = today();
+        String todayStr = today.toString();
+        String lastStr = this.data.getString(v2base(player) + ".daily.last_qualified_date", "");
+        if (todayStr.equals(lastStr)) return false;
+        if (activeToday(player.getUniqueId()) < dailyQualifySeconds()) return false;
+        int pending = dailyPending(player);
+        this.data.set(v2base(player) + ".daily.pending", pending + 1);
+        this.data.set(v2base(player) + ".daily.last_qualified_date", todayStr);
+        save();
+        int next = dailyNextDay(player);
+        long mins = Math.max(1L, dailyQualifySeconds() / 60L);
+        player.sendMessage(ChatColor.GREEN + "You've reached " + mins + " minutes online. Day "
+                + next + " is ready to claim.");
+        return true;
+    }
+
+    /** Reward configured for exactly this day number, highest at-or-below fallback. */
+    public Reward dailyRewardForDay(int day) {
+        Reward selected = null;
+        for (Reward reward : configured("daily-rewards.rewards", "day")) {
+            if (reward.threshold() <= day && (selected == null || reward.threshold() > selected.threshold())) {
+                selected = reward;
+            }
+        }
+        return selected;
+    }
+
+    /**
+     * Claim button logic: pays daily_next_day from one pending claim, then
+     * advances. Inventory-full protection keeps the claim pending when a
+     * physical item has nowhere to go. Day 30 sets completed + broadcasts.
+     */
+    public boolean claimDailyNext(Player player) {
+        if (!acquireClaimLock(player)) return false;
+        try {
+            return claimDailyNextInner(player);
+        } finally {
+            releaseClaimLock(player);
+        }
+    }
+
+    private boolean claimDailyNextInner(Player player) {
+        if (dailyCompleted(player)) return false;
+        checkDailyReset(player);
+        int pending = dailyPending(player);
+        if (pending <= 0) return false;
+        int day = dailyNextDay(player);
+        Reward reward = dailyRewardForDay(day);
+        if (reward == null) return false;
+        if (!hasRoomFor(player, reward)) {
+            player.sendMessage(ChatColor.RED + "Make room in your inventory first - claim kept pending.");
+            return false;
+        }
+        execute(player, reward, day, playtimeHours(player));
+        this.data.set(v2base(player) + ".daily.pending", pending - 1);
+        if (day >= MAX_DAILY_DAY) {
+            this.data.set(v2base(player) + ".daily.completed", true);
+            this.data.set(v2base(player) + ".daily.pending", 0);
+            save();
+            String broadcast = this.plugin.getConfig().getString("daily-rewards.complete-broadcast",
+                    "&6&l%player% &7completed the &e30-day rewards&7!");
+            if (broadcast != null && !broadcast.isEmpty()) {
+                Bukkit.broadcastMessage(UiKit.colour(broadcast.replace("%player%", player.getName())));
+            }
+        } else {
+            this.data.set(v2base(player) + ".daily.next_day", day + 1);
+            save();
+        }
+        return true;
+    }
+
+    /** True when any reward command would place a physical item. */
+    private boolean hasRoomFor(Player player, Reward reward) {
+        boolean needsSlot = false;
+        for (String command : reward.commands()) {
+            String lower = command.trim().toLowerCase(Locale.ROOT);
+            if (lower.startsWith("give ") && !lower.startsWith("crate give")
+                    && !lower.startsWith("shard give") && !lower.startsWith("eco give")) {
+                needsSlot = true;
+                break;
+            }
+        }
+        if (!needsSlot) return true;
+        try {
+            return player.getInventory().firstEmpty() != -1;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private boolean acquireClaimLock(Player player) {
+        long now = System.currentTimeMillis();
+        Long until = this.claimLock.get(player.getUniqueId());
+        if (until != null && until > now) return false;
+        this.claimLock.put(player.getUniqueId(), now + CLAIM_LOCK_MILLIS);
+        return true;
+    }
+
+    private void releaseClaimLock(Player player) {
+        // Keep the expiry briefly so a double-click inside the window still
+        // collapses; the timestamp, not removal, is the lock.
+    }
+
+    /** Claimed milestone hours, ascending. */
+    public List<Integer> playtimeClaimedHours(Player player) {
+        List<Integer> out = new ArrayList<>();
+        String root = v2base(player) + ".playtime.claimed-hours";
+        for (int h : this.data.getIntegerList(root)) {
+            if (h > 0) out.add(h);
+        }
+        java.util.Collections.sort(out);
+        return out;
+    }
+
+    public boolean playtimeHourClaimed(Player player, int hour) {
+        return playtimeClaimedHours(player).contains(hour);
+    }
+
+    /** Playtime reward configured for exactly this hour, or null. */
+    public Reward playtimeRewardForHour(int hour) {
+        for (Reward reward : playtimeRewards()) {
+            if (reward.threshold() == (long) hour * 60L) {
+                return reward;
+            }
+        }
+        return null;
+    }
+
+    /** All configured playtime milestone hours, ascending. */
+    public List<Integer> playtimeMilestoneHours() {
+        List<Integer> out = new ArrayList<>();
+        for (Reward reward : playtimeRewards()) {
+            long minutes = reward.threshold();
+            if (minutes % 60L == 0L) {
+                out.add((int) (minutes / 60L));
+            }
+        }
+        java.util.Collections.sort(out);
+        return out;
+    }
+
+    public boolean playtimeHourReady(Player player, int hour) {
+        if (playtimeCompleted(player)) return false;
+        if (playtimeHourClaimed(player, hour)) return false;
+        return activeHours(player) >= hour;
+    }
+
+    /**
+     * Claims one playtime milestone by hour number. Hour 200 sets completed
+     * + broadcasts. Returns true when paid.
+     */
+    public boolean claimPlaytimeHour(Player player, int hour) {
+        if (!acquireClaimLock(player)) return false;
+        try {
+            return claimPlaytimeHourUnlocked(player, hour);
+        } finally {
+            releaseClaimLock(player);
+        }
+    }
+
+    /** Core claim without the lock; callers hold it (or hold it for a batch). */
+    private boolean claimPlaytimeHourUnlocked(Player player, int hour) {
+        if (playtimeCompleted(player) || playtimeHourClaimed(player, hour)) return false;
+        if (activeHours(player) < hour) return false;
+        Reward reward = playtimeRewardForHour(hour);
+        if (reward == null) return false;
+        if (!hasRoomFor(player, reward)) {
+            player.sendMessage(ChatColor.RED + "Make room in your inventory first.");
+            return false;
+        }
+        execute(player, reward, 0, playtimeHours(player));
+        List<Integer> claimed = playtimeClaimedHours(player);
+        if (!claimed.contains(hour)) claimed.add(hour);
+        java.util.Collections.sort(claimed);
+        this.data.set(v2base(player) + ".playtime.claimed-hours", claimed);
+        if (hour >= MAX_PLAYTIME_HOUR) {
+            this.data.set(v2base(player) + ".playtime.completed", true);
+            save();
+            String broadcast = this.plugin.getConfig().getString("playtime-rewards.complete-broadcast",
+                    "&6&l%player% &7completed the &e200-hour rewards&7!");
+            if (broadcast != null && !broadcast.isEmpty()) {
+                Bukkit.broadcastMessage(UiKit.colour(broadcast.replace("%player%", player.getName())));
+            }
+        } else {
+            save();
+        }
+        return true;
+    }
+
+    /** Claims every reached, unclaimed milestone in ascending hour order. */
+    public int claimAllPlaytime(Player player) {
+        if (!acquireClaimLock(player)) return 0;
+        int paid = 0;
+        try {
+            for (int hour : playtimeMilestoneHours()) {
+                if (playtimeCompleted(player)) break;
+                if (claimPlaytimeHourUnlocked(player, hour)) paid++;
+            }
+        } finally {
+            releaseClaimLock(player);
+        }
+        return paid;
     }
 
     private void status(Player player) {
@@ -460,10 +896,11 @@ public final class RewardsModule implements Listener {
         boolean claimedToday = dailyClaimedToday(player);
         List<LocalDate> pending = unclaimedEligibleDates(player);
         int timeReady = 0;
+        long mins = playtimeMinutes(player);
         for (Reward reward : playtimeRewards()) {
-            if (hours >= reward.threshold && !this.data.getBoolean(base + ".playtime.claimed." + reward.id, false)) timeReady++;
+            if (mins >= reward.threshold && !this.data.getBoolean(base + ".playtime.claimed." + reward.id, false)) timeReady++;
         }
-        player.sendMessage(UiKit.colour("&#EEBB01Rewards &8| &f" + hours + " hour"
+        player.sendMessage(UiKit.colour("&#00ff00Rewards &8| &f" + hours + " hour"
                 + (hours == 1 ? "" : "s") + " played"));
         player.sendMessage(ChatColor.GRAY + "Today online: " + ChatColor.WHITE + (have / 60L) + "m"
                 + ChatColor.GRAY + " (need " + (need / 60L) + "m)");
@@ -501,7 +938,32 @@ public final class RewardsModule implements Listener {
     }
 
     public List<Reward> playtimeRewards() {
-        return configured("playtime-rewards.rewards", "hours");
+        ConfigurationSection section = this.plugin.getConfig().getConfigurationSection("playtime-rewards.rewards");
+        List<Reward> out = new ArrayList<>();
+        if (section == null) return out;
+        for (String id : section.getKeys(false)) {
+            ConfigurationSection item = section.getConfigurationSection(id);
+            if (item == null || !item.getBoolean("enabled", true)) continue;
+            long minutes = item.getLong("hours", 0L) * 60L + item.getLong("minutes", 0L);
+            if (minutes <= 0L) minutes = 60L;
+            List<String> commands = item.getStringList("commands");
+            if (!commands.isEmpty()) out.add(new Reward(id, minutes, commands));
+        }
+        out.sort(Comparator.comparingLong(Reward::threshold));
+        return out;
+    }
+
+    /** Tracked lifetime playtime in whole minutes. Thresholds are minutes. */
+    public long playtimeMinutes(Player player) {
+        return playtimeSeconds(player) / 60L;
+    }
+
+    /** "30m", "1h", "1h 20m" for GUI progress lore. */
+    public static String formatMinutes(long minutes) {
+        if (minutes < 60L) return minutes + "m";
+        long h = minutes / 60L;
+        long m = minutes % 60L;
+        return m == 0L ? h + "h" : h + "h " + m + "m";
     }
 
     private List<Reward> configured(String path, String thresholdKey) {

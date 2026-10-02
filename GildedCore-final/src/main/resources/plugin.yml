@@ -61,21 +61,17 @@ commands:
     description: Toggle announcements for yourself.
     usage: /announcements
     permission: gildedcore.announcements
-  staffcode:
-    description: Generate a one-time staff action code.
-    usage: /staffcode
-    permission: gildedcore.staffmanager
   promote:
-    description: Promote staff using a one-time code.
-    usage: /promote <player> [rank] <code>
+    description: Promote staff.
+    usage: /promote <player> [rank]
     permission: gildedcore.staffmanager
   demote:
-    description: Demote staff using a one-time code.
-    usage: /demote <player> <code> [reason]
+    description: Demote staff.
+    usage: /demote <player> [reason]
     permission: gildedcore.staffmanager
   hire:
-    description: Hire staff/media using a one-time code.
-    usage: /hire <player> [helper|media] <code>
+    description: Hire staff/media.
+    usage: /hire <player> [helper|media]
     permission: gildedcore.staffmanager
   block:
     description: Toggle blocking a player in chat.
@@ -154,6 +150,10 @@ commands:
     usage: /rewards <daily|playtime|claimall|status>
     aliases: [dailyrewards, playtimerewards]
     permission: gildedcore.rewards
+  vote:
+    description: Show vote sites and your vote stats.
+    usage: /vote
+    permission: gildedcore.vote
 permissions:
   # ---- Commands that everyone may use -------------------------------------
   # Named rather than unrestricted. Before this, these seven had no permission
@@ -182,6 +182,9 @@ permissions:
     default: true
   gildedcore.rewards:
     description: Claim available daily and playtime rewards.
+    default: true
+  gildedcore.vote:
+    description: View vote sites and vote stats.
     default: true
   # ---- Admin --------------------------------------------------------------
   gildedcore.announce:

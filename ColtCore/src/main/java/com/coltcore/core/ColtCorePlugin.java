@@ -51,7 +51,8 @@ import com.coltcore.core.modules.ContextAwareAntiAd;
 import com.coltcore.core.modules.IntegratedCoreModuleX;
 import com.coltcore.core.modules.JoinPacketIsolation;
 import com.coltcore.core.modules.RenameContextTracker;
-import com.coltcore.core.modules.RewardsGui;
+import com.coltcore.core.modules.DailyRewardsGui;
+import com.coltcore.core.modules.PlaytimeRewardsGui;
 import com.coltcore.core.modules.FlagReviewStore;
 import com.coltcore.core.modules.ReviewGui;
 import com.coltcore.core.modules.ReviewModule;
@@ -72,6 +73,7 @@ import com.coltcore.core.modules.ActiveRankModule;
 import com.coltcore.core.modules.DiagnosticsModule;
 import com.coltcore.core.modules.UiKit;
 import com.coltcore.core.modules.RedstoneThrottle;
+import com.coltcore.core.modules.RedstoneDestaler;
 import com.coltcore.core.modules.RedstoneUnstaler;
 import com.coltcore.core.modules.PlayerWipeModule;
 import com.coltcore.core.modules.ConsoleGuard;
@@ -138,7 +140,6 @@ extends JavaPlugin
 implements Listener {
     private static final Pattern HEX_COLOR = Pattern.compile("&#([A-Fa-f0-9]{6})");
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final String CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private final Map<UUID, Long> rtpCooldowns = new HashMap<UUID, Long>();
     private final List<UUID> rtpQueue = new ArrayList<UUID>();
     /**
@@ -205,8 +206,6 @@ implements Listener {
     private LuckPerms luckPerms;
     private File blocksFile;
     private FileConfiguration blocks;
-    private File codesFile;
-    private FileConfiguration codes;
     private ChatLimiterModule chatLimiterModule;
     private CreativeGuardModule creativeGuardModule;
     private StashModule stashModule;
@@ -218,7 +217,8 @@ implements Listener {
     private SignContextTracker signContextTracker;
     private RenameContextTracker renameContextTracker;
     private ContextAwareAntiAd contextAwareAntiAd;
-    private RewardsGui rewardsGui;
+    private DailyRewardsGui dailyGui;
+    private PlaytimeRewardsGui playtimeGui;
     private FlagReviewStore flagReviewStore;
     private ReviewGui reviewGui;
 
@@ -226,6 +226,7 @@ implements Listener {
     private ActiveRankModule activeRankModule;
     private RedstoneThrottle redstoneThrottle;
     private RedstoneUnstaler redstoneUnstaler;
+    private RedstoneDestaler redstoneDestaler;
     private PlayerWipeModule playerWipeModule;
     private DiagnosticsModule diagnosticsModule;
     private ReviewModule reviewModule;
@@ -298,6 +299,9 @@ implements Listener {
         this.redstoneUnstaler = new RedstoneUnstaler(this);
         this.redstoneUnstaler.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.redstoneUnstaler, (Plugin)this);
+        this.redstoneDestaler = new RedstoneDestaler(this);
+        this.redstoneDestaler.enable();
+        Bukkit.getPluginManager().registerEvents((Listener)this.redstoneDestaler, (Plugin)this);
         this.playerWipeModule = new PlayerWipeModule(this);
         this.playerWipeModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.playerWipeModule, (Plugin)this);
@@ -320,12 +324,17 @@ implements Listener {
         this.antibotGuard.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.antibotGuard, (Plugin)this);
         this.rewardsModule.setAntibot(this.antibotGuard);
+        // The active-rank threshold reads the same tracked playtime the rewards
+        // GUI shows. Reading the vanilla statistic instead meant the hours never
+        // reached the requirement and the rank was never actually granted.
+        this.activeRankModule.playtimeSource(p -> this.rewardsModule.playtimeHours(p));
         this.joinRewardModule = new JoinRewardModule(this);
         this.joinRewardModule.enable();
         Bukkit.getPluginManager().registerEvents((Listener)this.joinRewardModule, (Plugin)this);
-        this.rewardsGui = new RewardsGui(this.rewardsModule);
-        this.rewardsGui.enable();
-        Bukkit.getPluginManager().registerEvents((Listener)this.rewardsGui, (Plugin)this);
+        this.dailyGui = new DailyRewardsGui(this.rewardsModule);
+        Bukkit.getPluginManager().registerEvents((Listener)this.dailyGui, (Plugin)this);
+        this.playtimeGui = new PlaytimeRewardsGui(this.rewardsModule);
+        Bukkit.getPluginManager().registerEvents((Listener)this.playtimeGui, (Plugin)this);
         // Staff flag-review queue: every advertising block lands here with who,
         // what, and the model percentage; executive+ adjudicate false positives.
         this.flagReviewStore = new FlagReviewStore();
@@ -407,13 +416,27 @@ implements Listener {
     }
 
     /**
-     * /rewards with no arguments opens the click GUI; anything else runs the
-     * text subcommands (daily, playtime, claimall, status, reload).
+     * Rewards command routing. The alias the player typed decides the GUI:
+     * {@code command.getName()} only ever returns "rewards", so /dailyrewards
+     * and /playtimerewards would otherwise land on the same branch. Console
+     * and text subcommands fall through to {@link RewardsModule#command}.
      */
-    private boolean openRewards(CommandSender sender, String[] args) {
-        if (args.length == 0 && sender instanceof Player player && this.rewardsGui != null) {
-            this.rewardsGui.openGui(player);
-            return true;
+    private boolean openRewards(CommandSender sender, String label, String[] args) {
+        String typed = label == null ? "" : label.toLowerCase(Locale.ROOT);
+        boolean guiWanted = args.length == 0
+                || args[0].equalsIgnoreCase("playtime")
+                || args[0].equalsIgnoreCase("daily");
+        if (guiWanted && sender instanceof Player player) {
+            boolean playtime = typed.equals("playtimerewards")
+                    || (args.length > 0 && args[0].equalsIgnoreCase("playtime"));
+            if (playtime && this.playtimeGui != null) {
+                this.playtimeGui.openGui(player);
+                return true;
+            }
+            if (!playtime && this.dailyGui != null) {
+                this.dailyGui.openGui(player);
+                return true;
+            }
         }
         return this.rewardsModule.command(sender, args);
     }
@@ -490,7 +513,7 @@ implements Listener {
         if (this.stashModule != null) this.stashModule.disable();
         if (this.kelpGrowthModule != null) this.kelpGrowthModule.disable();
         if (this.staffMonitorModule != null) this.staffMonitorModule.disable();
-        if (this.rewardsGui != null) this.rewardsGui.disable();
+        
         if (this.reviewGui != null) this.reviewGui.disable();
         if (this.contextAwareAntiAd != null) this.contextAwareAntiAd.disable();
         if (this.renameContextTracker != null) this.renameContextTracker.disable();
@@ -499,6 +522,7 @@ implements Listener {
         if (this.activeRankModule != null) this.activeRankModule.disable();
         if (this.redstoneThrottle != null) this.redstoneThrottle.disable();
         if (this.redstoneUnstaler != null) this.redstoneUnstaler.disable();
+        if (this.redstoneDestaler != null) this.redstoneDestaler.disable();
         if (this.playerWipeModule != null) this.playerWipeModule.disable();
         if (this.reviewModule != null) this.reviewModule.disable();
         if (this.diagnosticsModule != null) this.diagnosticsModule.disable();
@@ -530,7 +554,6 @@ implements Listener {
             case "kitall" -> this.kitall(sender, args);
             case "shardall" -> this.shardall(sender, args);
             case "rankgive" -> this.rankGive(sender, args);
-            case "staffcode" -> this.staffCode(sender, args);
             case "promote" -> this.promote(sender, args);
             case "demote" -> this.demote(sender, args);
             case "hire" -> this.hire(sender, args);
@@ -547,7 +570,7 @@ implements Listener {
             case "playerwipe" -> this.playerWipeModule.command(sender, args);
             case "review" -> this.reviewModule.command(sender, args);
             case "flagreview" -> openFlagReview(sender);
-            case "rewards", "dailyrewards", "playtimerewards" -> openRewards(sender, args);
+            case "rewards" -> openRewards(sender, label, args);
             case "redeem" -> this.redeemModule.redeem(sender, args);
             case "redeemcode" -> this.redeemModule.admin(sender, args);
             default -> false;
@@ -587,7 +610,7 @@ implements Listener {
             Map.entry("kitall",           "coltcore.admin.kitall"),
             Map.entry("shardall",         "coltcore.admin.shardall"),
             Map.entry("rankgive",         "coltcore.rankgive"),
-            Map.entry("staffcode",        "coltcore.staffmanager"),
+            
             Map.entry("promote",          "coltcore.staffmanager"),
             Map.entry("demote",           "coltcore.staffmanager"),
             Map.entry("hire",             "coltcore.staffmanager"),
@@ -683,6 +706,7 @@ implements Listener {
             if (this.entityLimitModule != null) this.entityLimitModule.reload();
             if (this.redstoneThrottle != null) this.redstoneThrottle.reload();
             if (this.redstoneUnstaler != null) this.redstoneUnstaler.reload();
+            if (this.redstoneDestaler != null) this.redstoneDestaler.reload();
             this.consoleGuard.reload();
             sender.sendMessage(this.color("&aColtCore reloaded."));
             return true;
@@ -897,77 +921,6 @@ implements Listener {
         SchedulerCompat.runLater(this, () -> player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.7f, 1.0f), 4L);
     }
 
-    /**
-     * Mints a one-time staff code and delivers it to Discord.
-     *
-     * <h2>What was wrong before</h2>
-     * This printed "Staff codes are Discord-only" and did nothing else, and
-     * nothing anywhere else wrote a code either. {@link #consumeCode} reads
-     * codes.yml, codes.yml was never written, so every code was invalid and
-     * /promote, /demote and /staffremove could not succeed at all.
-     *
-     * <h2>Discord-only means delivery, not absence</h2>
-     * The code is generated here and sent to the configured DiscordSRV channel.
-     * It is never printed in game, so holding the rank is not enough — you also
-     * have to be in the staff channel to read it. That is the property the
-     * original message was describing; it just was not implemented.
-     *
-     * <p>Console is the exception, and deliberately: DiscordSRV's own console
-     * channel relays commands from Discord, so a code requested that way is
-     * already being read in Discord. It is printed there so the flow works with
-     * nothing but a console relay configured.
-     */
-    private boolean staffCode(CommandSender sender, String[] args) {
-        boolean console = !(sender instanceof Player);
-        if (!console && !this.isStaffManager((Player) sender)) {
-            sender.sendMessage(this.color("&cOnly Managers, Co-Owners and Owners can request a code."));
-            return true;
-        }
-
-        OfflinePlayer target;
-        if (args.length >= 2) {
-            target = Bukkit.getOfflinePlayer(args[1]);
-        } else if (!console) {
-            target = (Player) sender;
-        } else {
-            sender.sendMessage(this.color("&cUsage from console: /staffcode <player>"));
-            return true;
-        }
-        if (target.getUniqueId() == null) {
-            sender.sendMessage(this.color("&cUnknown player."));
-            return true;
-        }
-
-        long ttlMinutes = Math.max(1L, this.getConfig().getLong("staffmanager.code-ttl-minutes", 10L));
-        String code = this.randomCode();
-        String path = "codes." + code;
-        this.codes.set(path + ".owner", target.getUniqueId().toString());
-        this.codes.set(path + ".name", target.getName());
-        this.codes.set(path + ".expires", Instant.now().getEpochSecond() + ttlMinutes * 60L);
-        this.codes.set(path + ".issued-by", sender.getName());
-        this.saveCodes();
-
-        String channel = this.getConfig().getString("staffmanager.discord-channel", "staff");
-        String body = "**Staff code** for `" + target.getName() + "`\n"
-                + "`" + code + "`\n"
-                + "Requested by **" + sender.getName() + "**, expires in "
-                + ttlMinutes + " minute(s). One use.";
-        boolean sent = com.coltcore.core.modules.DiscordBridge.available();
-        com.coltcore.core.modules.DiscordBridge.send(this, "[StaffCode]", channel, body);
-
-        if (console) {
-            sender.sendMessage(this.color("&#00ff00Staff code for &f" + target.getName()
-                    + "&#00ff00: &e" + code + " &7(expires in " + ttlMinutes + "m, one use)"));
-        } else {
-            this.boxMessage(sender, "&#00ff00Staff Code",
-                    sent ? "&7Sent to the &f#" + channel + " &7Discord channel."
-                         : "&cDiscordSRV is not installed, so there is nowhere to send it. "
-                           + "&7Run &f/staffcode " + target.getName() + " &7from console.");
-        }
-        this.getLogger().info("[StaffCode] issued for " + target.getName()
-                + " by " + sender.getName() + ", expires in " + ttlMinutes + "m.");
-        return true;
-    }
 
     private boolean rankGive(CommandSender sender, String[] args) {
         if (!(sender instanceof ConsoleCommandSender) && !sender.hasPermission("coltcore.rankgive")) {
@@ -994,19 +947,14 @@ implements Listener {
             sender.sendMessage(this.color("&cOnly Managers, Co-Owners, and Owners can promote."));
             return true;
         }
-        if (args.length < 2) {
-            sender.sendMessage(this.color("&cUsage: /promote <player> [rank] <code>"));
-            return true;
-        }
-        String code = args[args.length - 1];
-        if (!this.consumeCode(actor, code)) {
-            sender.sendMessage(this.color("&cInvalid or expired staff code."));
+        if (args.length < 1) {
+            sender.sendMessage(this.color("&cUsage: /promote <player> [rank]"));
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer((String)args[0]);
         CompletableFuture.runAsync(() -> {
             String current = this.group(target);
-            String targetRank = args.length >= 3 ? args[1].toLowerCase(Locale.ROOT) : this.nextRank(current);
+            String targetRank = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : this.nextRank(current);
             SchedulerCompat.run(this, () -> this.setRank(actor, target, targetRank, "promoted"));
         });
         return true;
@@ -1018,16 +966,12 @@ implements Listener {
             sender.sendMessage(this.color("&cOnly Managers, Co-Owners, and Owners can demote."));
             return true;
         }
-        if (args.length < 2) {
-            sender.sendMessage(this.color("&cUsage: /demote <player> <code> [reason]"));
-            return true;
-        }
-        if (!this.consumeCode(actor, args[1])) {
-            sender.sendMessage(this.color("&cInvalid or expired staff code."));
+        if (args.length < 1) {
+            sender.sendMessage(this.color("&cUsage: /demote <player> [reason]"));
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer((String)args[0]);
-        String reason = args.length >= 3 ? String.join((CharSequence)" ", List.of(args).subList(2, args.length)) : "No reason provided.";
+        String reason = args.length >= 2 ? String.join((CharSequence)" ", List.of(args).subList(1, args.length)) : "No reason provided.";
         CompletableFuture.runAsync(() -> {
             String next = this.previousRank(this.group(target));
             SchedulerCompat.run(this, () -> this.setRank(actor, target, next, "demoted: " + reason));
@@ -1041,16 +985,11 @@ implements Listener {
             sender.sendMessage(this.color("&cOnly Managers, Co-Owners, and Owners can hire."));
             return true;
         }
-        if (args.length < 2) {
-            sender.sendMessage(this.color("&cUsage: /hire <player> [helper|jrmod|media] <code>"));
+        if (args.length < 1) {
+            sender.sendMessage(this.color("&cUsage: /hire <player> [helper|jrmod|media]"));
             return true;
         }
-        String code = args[args.length - 1];
-        if (!this.consumeCode(actor, code)) {
-            sender.sendMessage(this.color("&cInvalid or expired staff code."));
-            return true;
-        }
-        String rank = args.length >= 3 ? args[1].toLowerCase(Locale.ROOT) : "helper";
+        String rank = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "helper";
         // Entry-level only. Hiring straight to manager or above would bypass
         // the ladder entirely; those moves go through /promote.
         if (!rank.equals("helper") && !rank.equals("jrmod") && !rank.equals("media")) {
@@ -1441,26 +1380,6 @@ implements Listener {
                 || MANAGER_PLUS_ROLES.contains(group);
     }
 
-    private boolean consumeCode(Player player, String code) {
-        String path = "codes." + code.toUpperCase(Locale.ROOT);
-        if (!player.getUniqueId().toString().equals(this.codes.getString(path + ".owner", ""))) {
-            return false;
-        }
-        if (this.codes.getLong(path + ".expires", 0L) < Instant.now().getEpochSecond()) {
-            return false;
-        }
-        this.codes.set(path, null);
-        this.saveCodes();
-        return true;
-    }
-
-    private String randomCode() {
-        StringBuilder out = new StringBuilder(8);
-        for (int i = 0; i < 8; ++i) {
-            out.append(CODE_CHARS.charAt(RANDOM.nextInt(CODE_CHARS.length())));
-        }
-        return out.toString();
-    }
 
     /**
      * Manager and above on the Colt ladder — the gate for creator-code
@@ -1859,9 +1778,7 @@ implements Listener {
 
     private void loadFiles() {
         this.blocksFile = new File(this.getDataFolder(), "blocks.yml");
-        this.codesFile = new File(this.getDataFolder(), "codes.yml");
         this.blocks = YamlConfiguration.loadConfiguration((File)this.blocksFile);
-        this.codes = YamlConfiguration.loadConfiguration((File)this.codesFile);
     }
 
     private void saveBlocks() {
@@ -1873,14 +1790,7 @@ implements Listener {
         }
     }
 
-    private void saveCodes() {
-        try {
-            this.codes.save(this.codesFile);
-        }
-        catch (IOException ex) {
-            this.getLogger().warning("Could not save codes.yml: " + ex.getMessage());
-        }
-    }
+    
 
     private void dispatch(String command) {
         Bukkit.dispatchCommand((CommandSender)Bukkit.getConsoleSender(), (String)command);

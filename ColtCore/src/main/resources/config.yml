@@ -49,19 +49,8 @@ tips:
   messages: []
 
 staffmanager:
-  # Where /staffcode delivers the code. Requires DiscordSRV; the name is the
-  # GAME channel name in DiscordSRV's config, not the Discord channel name.
-  #
-  # The code is never printed in game. Holding the rank is not enough - you
-  # also have to be in the staff channel to read it, which is the two-person
-  # property the feature was always described as having but never had, because
-  # nothing anywhere wrote a code and every /promote failed.
-  #
-  # From console (including DiscordSRV's console relay) the code IS printed,
-  # since a command run through Discord is already being read in Discord.
-  discord-channel: 'staff'
-  code-ttl-minutes: 10
-  code-ttl-seconds: 300
+  # Who may run the staff ladder commands (/promote, /demote, /hire).
+  # Rank-based authorization only; one-time codes were removed.
   allowed-actors:
     - owner
     - co-owner
@@ -1509,6 +1498,36 @@ redstone-unstaler:
   # Log every fixed block. Off by default; enable when investigating a farm.
   log-repairs: false
 
+redstone-destaler:
+  # The chunk-scan counterpart to redstone-unstaler. The unstaler watches live
+  # circuits via BlockRedstoneEvent; this keeps an index of chunks that hold
+  # redstone (components plus anything that outputs a signal), loads them when
+  # needed, and repairs any powered component nothing around can explain - the
+  # pre-powered ghosts that arrive via chunk load, paste, schematic restore or
+  # rollback and therefore never fire an event. Same repair semantics, same
+  # comparator exemption.
+  enabled: true
+
+  # Sweep period in ticks. 100 = every 5 seconds. Each sweep works a small
+  # budgeted slice (below), so raising the rate raises coverage, not cost.
+  period-ticks: 100
+
+  # Budget valves so the scan can never itself become the lag source.
+  max-chunks-per-sweep: 6
+  max-forceloads-per-sweep: 1
+  max-repairs-per-sweep: 64
+
+  # Minimum ticks before a chunk is walked again. 3600 = 5 minutes at 5s sweeps.
+  rescan-cooldown-ticks: 3600
+
+  # sync      - re-run physics so vanilla re-resolves the signal. Farm-safe.
+  # turn-off  - also force the powered flag off. Comparators are exempt and
+  #             always just resynced (input could be a container).
+  action: sync
+
+  # Log every fixed block. Off by default; enable when investigating a farm.
+  log-repairs: false
+
 review:
   # Human sign-off on automated punishments, and the training loop it feeds.
   #
@@ -1565,8 +1584,9 @@ review:
   max-pending: 20
 
 daily-rewards:
-  # Once per calendar day, in this timezone. A missed day resets the streak to
-  # one, so this is a consecutive-day streak rather than a running total.
+  # Once per calendar day, in this timezone. Days qualify on
+  # minimum-online-minutes online; missed days do not advance. 3+ consecutive
+  # missed days reset next_day to 1. Qualified-but-unclaimed days queue as pending.
   enabled: true
   timezone: 'UTC'
   # A calendar day only counts once the player has been online this long on it.
@@ -1576,6 +1596,8 @@ daily-rewards:
   # How many earned-but-unclaimed days one claim may pay out at once, newest
   # last. Stops a long absence turning into one enormous payout.
   max-back-claim-days: 31
+  # Broadcast when someone claims day 30. Blank disables.
+  complete-broadcast: '&6&l%player% &7completed the &e30-day rewards&7!'
   # The reward granted is the highest entry whose 'day' is at or below the
   # player's current streak. Adding day-14 or day-30 needs no code change.
   #
@@ -1586,227 +1608,464 @@ daily-rewards:
       day: 1
       enabled: true
       commands:
-        - 'eco give %player% 15000'
-        - 'crate give %player% common 1'
+        - 'eco give %player% 25000'
+        - 'crate give %player% common 2'
     day-2:
       day: 2
       enabled: true
       commands:
-        - 'eco give %player% 20000'
-        - 'crate give %player% common 1'
+        - 'eco give %player% 30000'
+        - 'crate give %player% common 2'
     day-3:
       day: 3
       enabled: true
       commands:
-        - 'eco give %player% 30000'
-        - 'crate give %player% common 2'
+        - 'eco give %player% 40000'
+        - 'crate give %player% common 3'
     day-4:
       day: 4
       enabled: true
       commands:
-        - 'eco give %player% 40000'
-        - 'crate give %player% gold 1'
+        - 'eco give %player% 50000'
+        - 'shard give %player% 50'
     day-5:
       day: 5
       enabled: true
       commands:
-        - 'eco give %player% 50000'
-        - 'crate give %player% crimson 1'
+        - 'eco give %player% 75000'
+        - 'crate give %player% gold 1'
     day-6:
       day: 6
       enabled: true
       commands:
-        - 'eco give %player% 75000'
-        - 'crate give %player% amethyst 1'
+        - 'eco give %player% 90000'
+        - 'crate give %player% common 3'
     day-7:
       day: 7
       enabled: true
       commands:
-        - 'eco give %player% 100000'
-        - 'crate give %player% prime 1'
+        - 'eco give %player% 150000'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 100'
     day-8:
       day: 8
       enabled: true
       commands:
-        - 'eco give %player% 110000'
+        - 'eco give %player% 120000'
         - 'crate give %player% common 3'
     day-9:
       day: 9
       enabled: true
       commands:
-        - 'eco give %player% 120000'
-        - 'crate give %player% gold 1'
+        - 'eco give %player% 130000'
+        - 'shard give %player% 75'
     day-10:
       day: 10
       enabled: true
       commands:
-        - 'eco give %player% 130000'
-        - 'crate give %player% crimson 1'
+        - 'eco give %player% 175000'
+        - 'crate give %player% gold 1'
     day-11:
       day: 11
       enabled: true
       commands:
-        - 'eco give %player% 140000'
-        - 'crate give %player% gold 2'
+        - 'eco give %player% 150000'
+        - 'crate give %player% common 3'
     day-12:
       day: 12
       enabled: true
       commands:
-        - 'eco give %player% 150000'
-        - 'crate give %player% crimson 1'
+        - 'eco give %player% 160000'
+        - 'shard give %player% 100'
     day-13:
       day: 13
       enabled: true
       commands:
-        - 'eco give %player% 160000'
-        - 'crate give %player% crimson 2'
+        - 'eco give %player% 175000'
+        - 'crate give %player% common 4'
     day-14:
       day: 14
       enabled: true
       commands:
-        - 'eco give %player% 200000'
-        - 'crate give %player% prime 1'
+        - 'eco give %player% 300000'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 200'
     day-15:
       day: 15
       enabled: true
       commands:
-        - 'eco give %player% 180000'
-        - 'crate give %player% gold 2'
+        - 'eco give %player% 250000'
+        - 'crate give %player% gold 1'
     day-16:
       day: 16
       enabled: true
       commands:
-        - 'eco give %player% 185000'
-        - 'crate give %player% crimson 2'
+        - 'eco give %player% 225000'
+        - 'crate give %player% common 4'
     day-17:
       day: 17
       enabled: true
       commands:
-        - 'eco give %player% 200000'
-        - 'crate give %player% gold 3'
+        - 'eco give %player% 250000'
+        - 'shard give %player% 150'
     day-18:
       day: 18
       enabled: true
       commands:
-        - 'eco give %player% 210000'
-        - 'crate give %player% gold 3'
+        - 'eco give %player% 275000'
+        - 'crate give %player% common 4'
     day-19:
       day: 19
       enabled: true
       commands:
-        - 'eco give %player% 225000'
-        - 'crate give %player% crimson 2'
+        - 'eco give %player% 300000'
+        - 'crate give %player% crimson 1'
     day-20:
       day: 20
       enabled: true
       commands:
-        - 'eco give %player% 240000'
-        - 'crate give %player% crimson 3'
+        - 'eco give %player% 400000'
+        - 'crate give %player% gold 2'
+        - 'shard give %player% 200'
     day-21:
       day: 21
       enabled: true
       commands:
-        - 'eco give %player% 300000'
-        - 'crate give %player% prime 1'
-        - 'crate give %player% crimson 2'
+        - 'eco give %player% 500000'
+        - 'crate give %player% amethyst 1'
+        - 'shard give %player% 250'
     day-22:
       day: 22
       enabled: true
       commands:
-        - 'eco give %player% 260000'
-        - 'crate give %player% gold 3'
+        - 'eco give %player% 350000'
+        - 'crate give %player% common 5'
     day-23:
       day: 23
       enabled: true
       commands:
-        - 'eco give %player% 275000'
-        - 'crate give %player% crimson 3'
+        - 'eco give %player% 400000'
+        - 'shard give %player% 250'
     day-24:
       day: 24
       enabled: true
       commands:
-        - 'eco give %player% 290000'
-        - 'crate give %player% crimson 3'
+        - 'eco give %player% 450000'
+        - 'crate give %player% gold 1'
     day-25:
       day: 25
       enabled: true
       commands:
-        - 'eco give %player% 300000'
-        - 'crate give %player% crimson 2'
+        - 'eco give %player% 900000'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 300'
     day-26:
       day: 26
       enabled: true
       commands:
-        - 'eco give %player% 325000'
-        - 'crate give %player% amethyst 1'
+        - 'eco give %player% 1250000'
+        - 'crate give %player% gold 2'
     day-27:
       day: 27
       enabled: true
       commands:
-        - 'eco give %player% 350000'
-        - 'crate give %player% crimson 3'
+        - 'eco give %player% 1500000'
+        - 'shard give %player% 600'
     day-28:
       day: 28
       enabled: true
       commands:
-        - 'eco give %player% 400000'
-        - 'crate give %player% prime 1'
+        - 'eco give %player% 3000000'
+        - 'crate give %player% amethyst 1'
+        - 'shard give %player% 750'
     day-29:
       day: 29
       enabled: true
       commands:
-        - 'eco give %player% 450000'
-        - 'crate give %player% crimson 3'
+        - 'eco give %player% 4000000'
+        - 'crate give %player% prime 1'
+        - 'crate give %player% gold 2'
+        - 'shard give %player% 800'
     day-30:
       day: 30
       enabled: true
       commands:
-        - 'eco give %player% 500000'
-        - 'crate give %player% prime 1'
-        - 'crate give %player% amethyst 1'
+        - 'eco give %player% 10000000'
+        - 'crate give %player% amethyst 2'
+        - 'shard give %player% 1000'
+
 
 playtime-rewards:
-  # Cumulative playtime, counted in whole hours from Bukkit's own statistic, so
-  # it survives restarts and covers time played before this module existed.
+  # Cumulative online hours from rewards.yml (join/quit + 60s flush).
+  # Anti-farming is handled by the anti-bot gate at claim time.
   #
-  # Each entry can be claimed exactly once, ever. The claim is recorded in
-  # rewards.yml next to the daily streak.
+  # Each milestone can be claimed exactly once, ever. Hour 200 sets completed.
+  # Milestones: hour 1, 5, 10, 15, then every 5 to 200 (41 total).
   enabled: true
+  # Broadcast when someone claims hour 200. Blank disables.
+  complete-broadcast: '&6&l%player% &7completed the &e200-hour rewards&7!'
   rewards:
-    first-hour:
+    hour-1:
       hours: 1
       enabled: true
       commands:
-        - 'eco give %player% 1000'
+        - 'eco give %player% 10000'
         - 'crate give %player% common 1'
-    five-hours:
+    hour-5:
       hours: 5
       enabled: true
       commands:
-        - 'crate give %player% common 1'
-        - 'shard give %player% 10'
-    ten-hours:
+        - 'eco give %player% 25000'
+        - 'crate give %player% common 2'
+    hour-10:
       hours: 10
       enabled: true
       commands:
-        - 'crate give %player% crimson 1'
-        - 'shard give %player% 50'
-    twenty-five-hours:
+        - 'eco give %player% 50000'
+        - 'crate give %player% common 3'
+    hour-15:
+      hours: 15
+      enabled: true
+      commands:
+        - 'eco give %player% 75000'
+        - 'shard give %player% 100'
+    hour-20:
+      hours: 20
+      enabled: true
+      commands:
+        - 'eco give %player% 100000'
+        - 'crate give %player% gold 1'
+    hour-25:
       hours: 25
       enabled: true
       commands:
+        - 'eco give %player% 125000'
+        - 'crate give %player% common 3'
+        - 'shard give %player% 150'
+    hour-30:
+      hours: 30
+      enabled: true
+      commands:
+        - 'eco give %player% 150000'
+        - 'crate give %player% crimson 1'
+    hour-35:
+      hours: 35
+      enabled: true
+      commands:
+        - 'eco give %player% 175000'
+        - 'crate give %player% common 4'
+        - 'shard give %player% 150'
+    hour-40:
+      hours: 40
+      enabled: true
+      commands:
+        - 'eco give %player% 200000'
         - 'crate give %player% gold 1'
-        - 'shard give %player% 100'
-    fifty-hours:
+    hour-45:
+      hours: 45
+      enabled: true
+      commands:
+        - 'eco give %player% 225000'
+        - 'shard give %player% 200'
+    hour-50:
       hours: 50
       enabled: true
       commands:
+        - 'eco give %player% 250000'
+        - 'crate give %player% common 5'
+        - 'crate give %player% crimson 1'
+    hour-55:
+      hours: 55
+      enabled: true
+      commands:
+        - 'eco give %player% 275000'
+        - 'shard give %player% 200'
+    hour-60:
+      hours: 60
+      enabled: true
+      commands:
+        - 'eco give %player% 300000'
+        - 'crate give %player% gold 2'
+    hour-65:
+      hours: 65
+      enabled: true
+      commands:
+        - 'eco give %player% 325000'
+        - 'crate give %player% common 5'
+        - 'shard give %player% 250'
+    hour-70:
+      hours: 70
+      enabled: true
+      commands:
+        - 'eco give %player% 350000'
+        - 'crate give %player% crimson 1'
+    hour-75:
+      hours: 75
+      enabled: true
+      commands:
+        - 'eco give %player% 375000'
+        - 'crate give %player% gold 1'
+        - 'shard give %player% 250'
+    hour-80:
+      hours: 80
+      enabled: true
+      commands:
+        - 'eco give %player% 400000'
         - 'crate give %player% amethyst 1'
-    hundred-hours:
+    hour-85:
+      hours: 85
+      enabled: true
+      commands:
+        - 'eco give %player% 425000'
+        - 'shard give %player% 300'
+    hour-90:
+      hours: 90
+      enabled: true
+      commands:
+        - 'eco give %player% 450000'
+        - 'crate give %player% gold 2'
+    hour-95:
+      hours: 95
+      enabled: true
+      commands:
+        - 'eco give %player% 475000'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 300'
+    hour-100:
       hours: 100
       enabled: true
       commands:
+        - 'eco give %player% 500000'
         - 'crate give %player% prime 1'
+        - 'shard give %player% 400'
+    hour-105:
+      hours: 105
+      enabled: true
+      commands:
+        - 'eco give %player% 525000'
+        - 'crate give %player% common 5'
+        - 'shard give %player% 350'
+    hour-110:
+      hours: 110
+      enabled: true
+      commands:
+        - 'eco give %player% 550000'
+        - 'crate give %player% gold 2'
+    hour-115:
+      hours: 115
+      enabled: true
+      commands:
+        - 'eco give %player% 575000'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 350'
+    hour-120:
+      hours: 120
+      enabled: true
+      commands:
+        - 'eco give %player% 600000'
+        - 'crate give %player% amethyst 1'
+    hour-125:
+      hours: 125
+      enabled: true
+      commands:
+        - 'eco give %player% 625000'
+        - 'shard give %player% 400'
+    hour-130:
+      hours: 130
+      enabled: true
+      commands:
+        - 'eco give %player% 650000'
+        - 'crate give %player% gold 2'
+    hour-135:
+      hours: 135
+      enabled: true
+      commands:
+        - 'eco give %player% 675000'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 400'
+    hour-140:
+      hours: 140
+      enabled: true
+      commands:
+        - 'eco give %player% 700000'
+        - 'crate give %player% amethyst 1'
+    hour-145:
+      hours: 145
+      enabled: true
+      commands:
+        - 'eco give %player% 725000'
+        - 'shard give %player% 450'
+    hour-150:
+      hours: 150
+      enabled: true
+      commands:
+        - 'eco give %player% 750000'
+        - 'crate give %player% prime 1'
+        - 'shard give %player% 450'
+    hour-155:
+      hours: 155
+      enabled: true
+      commands:
+        - 'eco give %player% 775000'
+        - 'crate give %player% gold 3'
+    hour-160:
+      hours: 160
+      enabled: true
+      commands:
+        - 'eco give %player% 800000'
+        - 'crate give %player% amethyst 1'
+    hour-165:
+      hours: 165
+      enabled: true
+      commands:
+        - 'eco give %player% 850000'
+        - 'crate give %player% crimson 1'
+        - 'shard give %player% 450'
+    hour-170:
+      hours: 170
+      enabled: true
+      commands:
+        - 'eco give %player% 1250000'
+        - 'crate give %player% gold 2'
+    hour-175:
+      hours: 175
+      enabled: true
+      commands:
+        - 'eco give %player% 1500000'
+        - 'crate give %player% amethyst 1'
+    hour-180:
+      hours: 180
+      enabled: true
+      commands:
+        - 'eco give %player% 2000000'
+        - 'crate give %player% gold 3'
+    hour-185:
+      hours: 185
+      enabled: true
+      commands:
+        - 'eco give %player% 2500000'
+        - 'crate give %player% crimson 1'
+    hour-190:
+      hours: 190
+      enabled: true
+      commands:
+        - 'eco give %player% 3000000'
+        - 'crate give %player% amethyst 1'
+        - 'shard give %player% 750'
+    hour-195:
+      hours: 195
+      enabled: true
+      commands:
+        - 'eco give %player% 4000000'
+        - 'crate give %player% prime 1'
+        - 'shard give %player% 800'
+    hour-200:
+      hours: 200
+      enabled: true
+      commands:
+        - 'eco give %player% 10000000'
+        - 'crate give %player% amethyst 2'
+        - 'shard give %player% 1000'
 
 join-rewards:
   # One-time welcome grant on first join, handled by its own module.
@@ -1852,13 +2111,14 @@ anti-ad:
     context-messages: 5
   log:
     keep-days: 30
+
 player-picker:
   # Any command that needs a username opens this instead of printing a usage
   # line. One inventory lists currently-active players first, then players who
   # left recently, and a written book at the bottom accepts any name at all -
   # including offline accounts and names that have never joined.
   #
-  # Gated commands: rankgive, promote, demote, hire, staffcode, block, ignore,
+  # Gated commands: rankgive, promote, demote, hire, block, ignore,
   # playerwipe, sus (aliases flags/anticheat), activerank grant/regrant/check,
   # rewards ban/pardon/resetplaytime, textguard unmute/stage/history.
   title: '&8Choose a player'

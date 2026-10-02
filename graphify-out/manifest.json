@@ -288,9 +288,9 @@
     "semantic_hash": ""
   },
   "GildedCore-final/pom.xml": {
-    "mtime": 1789816376.34984,
-    "seen": 1790327484.8042767,
-    "ast_hash": "f94bbf9fb16dc7398ecc1025440af5e6",
+    "mtime": 1790947594.8946364,
+    "seen": 1790967291.7452087,
+    "ast_hash": "8ef1b52a65c50e1ce12a7bd071f1f26c",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/ConfigUpdater.java": {
@@ -300,9 +300,9 @@
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/GildedCorePlugin.java": {
-    "mtime": 1790368252.734177,
-    "seen": 1790368444.5329902,
-    "ast_hash": "f512d965898ef3fb0e6e1d8fe5cdeae6",
+    "mtime": 1790966127.449419,
+    "seen": 1790967291.7452111,
+    "ast_hash": "b32303abb5b4655a064cb25082d0b58e",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/SchedulerCompat.java": {
@@ -522,9 +522,9 @@
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/modules/RewardsModule.java": {
-    "mtime": 1790364780.6764047,
-    "seen": 1790368444.5330367,
-    "ast_hash": "e94328da6b863870aa44705499a3dfb1",
+    "mtime": 1790966110.2047822,
+    "seen": 1790967291.74526,
+    "ast_hash": "8a89b407d926be59070b0409ec82a693",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/modules/Scripts.java": {
@@ -642,21 +642,21 @@
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/resources/commonwords.txt": {
-    "mtime": 1786670124.296726,
-    "seen": 1789700605.3411846,
-    "ast_hash": "e8e4e4d7cc27f83835fe59c09a656d2e",
+    "mtime": 1790936119.5571933,
+    "seen": 1790967291.7453,
+    "ast_hash": "d6f6b8a0cc7ad9da5a19e6190ae5564b",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/resources/config.yml": {
-    "mtime": 1790368313.9918396,
-    "seen": 1790368444.5330758,
-    "ast_hash": "5004d0abc01fc852b50bc179c11e4c82",
+    "mtime": 1790966170.4086115,
+    "seen": 1790967291.745301,
+    "ast_hash": "5f5f1536bbd8d1d09aa5de66efdf241f",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/resources/plugin.yml": {
-    "mtime": 1790368313.9748118,
-    "seen": 1790368444.5330765,
-    "ast_hash": "06992b6fdeaff2010a81400816fe6040",
+    "mtime": 1790944448.8897433,
+    "seen": 1790967291.7453017,
+    "ast_hash": "e076ad4a1a3a9696094c3e5c4372e0cd",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/resources/realchat.txt": {
@@ -774,9 +774,9 @@
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/modules/BookSignProximity.java": {
-    "mtime": 1789786397.215701,
-    "seen": 1790327484.804291,
-    "ast_hash": "26ea48589c3146611bf79dc3c29f076b",
+    "mtime": 1790931636.219029,
+    "seen": 1790967291.745217,
+    "ast_hash": "5d2c03b2fd120ef72874c3b996ad34c6",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/modules/CommandTemplate.java": {
@@ -825,12 +825,6 @@
     "mtime": 1790345996.9493632,
     "seen": 1790347021.1804368,
     "ast_hash": "dd50f20f633ad368897ff74291b971cf",
-    "semantic_hash": ""
-  },
-  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RewardsGui.java": {
-    "mtime": 1790364842.8017142,
-    "seen": 1790368444.5330358,
-    "ast_hash": "706ba0e84cbd2e9b1e78c3fe323fc6a4",
     "semantic_hash": ""
   },
   "GildedCore-final/src/main/java/com/gildedmc/core/modules/SignContextTracker.java": {
@@ -1059,6 +1053,48 @@
     "mtime": 1789744463.1401422,
     "seen": 1790327484.8044653,
     "ast_hash": "bfcf032fd201682837bcf3e594ac848f",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/DailyRewardsGui.java": {
+    "mtime": 1790967186.1509733,
+    "seen": 1790967291.7452252,
+    "ast_hash": "eb1c6dddaced73a6bc5dec3b1c261183",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/PlaytimeRewardsGui.java": {
+    "mtime": 1790966137.6880157,
+    "seen": 1790967291.7452517,
+    "ast_hash": "c09e905d6be767f237761e896402a725",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/RedstoneDestaler.java": {
+    "mtime": 1790938181.892686,
+    "seen": 1790967291.7452545,
+    "ast_hash": "c86129917f12e2555571dda58786a594",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/VoteGui.java": {
+    "mtime": 1790961464.5565696,
+    "seen": 1790967291.745272,
+    "ast_hash": "b471b318bb99db07214e86f0027ebd44",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/VoteListener.java": {
+    "mtime": 1790943953.8864303,
+    "seen": 1790967291.7452726,
+    "ast_hash": "487d31ae1269a892830b2bff9fb44b36",
+    "semantic_hash": ""
+  },
+  "GildedCore-final/src/main/java/com/gildedmc/core/modules/VoteModule.java": {
+    "mtime": 1790960615.8946133,
+    "seen": 1790967291.7452734,
+    "ast_hash": "dcebe9d13c5b041b2b7e027dcdf1c6a6",
+    "semantic_hash": ""
+  },
+  "memory.md": {
+    "mtime": 1790967257.2129977,
+    "seen": 1790967291.7453253,
+    "ast_hash": "d1145f88edc4414b21ea2837f98c71ad",
     "semantic_hash": ""
   }
 }
