@@ -82,11 +82,15 @@ public final class JoinPacketIsolation {
     public void unlock(Player player) {
         locked.remove(player.getUniqueId());
         List<PacketContainer> packets = heldTerrain.remove(player.getUniqueId());
-        String packetSummary = packets == null ? "" : packets.stream()
+        // Nothing held means nothing happened, and on a normal login that is
+        // every single join. Logging before this check printed one line per
+        // player per login saying "replaying 0 terrain packets".
+        if (packets == null || packets.isEmpty()) return;
+        String packetSummary = packets.stream()
                 .collect(Collectors.groupingBy(packet -> packet.getType().name(), Collectors.counting()))
                 .toString();
-        plugin.getLogger().info("Join packet lock released for " + player.getName() + "; replaying " + (packets == null ? 0 : packets.size()) + " terrain packets " + packetSummary + ".");
-        if (packets == null || packets.isEmpty()) return;
+        plugin.getLogger().info("Join packet lock released for " + player.getName()
+                + "; replaying " + packets.size() + " terrain packets " + packetSummary + ".");
         replaying.add(player.getUniqueId());
         try {
             for (PacketContainer packet : packets) {

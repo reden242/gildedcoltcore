@@ -25,17 +25,22 @@ import com.coltcore.core.modules.RewardsModule.Reward;
  *
  * <pre>
  *   row 0        frame, info star at slot 4
- *   rows 1-3     18 day slots: 10-15, 19-24, 28-33  (2 pages for 30 days)
- *   row 4        page indicator (40) alone, as a separator
- *   row 5        legend (45), prev (47), CLAIM (49), next (51), stats (53)
+ *   rows 1-3     21 slots: 10-16, 19-25, 28-33   (2 pages either way)
+ *   row 4        legend 37, prev 38, page 39, CLAIM 41, next 42, stats 43
+ *   row 5        frame only - nothing is placed on the border
  * </pre>
+ *
+ * <p>Seven columns, not six. UiKit.framed only draws the outer ring
+ * (c == 0 || c == 8), so column 7 is interior by the house definition - a
+ * 6-wide grid leaves slots 16, 25 and 34 empty and unframed, which reads as a
+ * hole in the middle of the menu rather than as margin.
  *
  * <p>18 per page rather than all 30 crammed into five rows: every tier's reward
  * is spelled out in its lore, and at 30 in one grid the text was unreadable.
  *
  * <p>State is read from the reward itself rather than the pane type, so an
  * unconfigured tier can never be drawn as "claimed" by accident. Icons are
- * dyes: LIME claimed, ORANGE ready, GRAY locked, LIGHT_BLUE for the weekly
+ * dyes: LIME claimed, ORANGE ready, GRAY locked, PURPLE for the weekly
  * milestones, PURPLE for the finale.
  */
 public final class DailyRewardsGui implements Listener {
@@ -44,18 +49,18 @@ public final class DailyRewardsGui implements Listener {
     private static final String TITLE = UiKit.titleGradient("Daily Rewards");
 
     private static final int INFO_SLOT = 4;
-    private static final int PREV_SLOT = 47;
-    private static final int PAGE_SLOT = 40;
-    private static final int NEXT_SLOT = 51;
-    private static final int LEGEND_SLOT = 45;
-    private static final int CLAIM_SLOT = 49;
-    private static final int STATS_SLOT = 53;
+    private static final int PREV_SLOT = 38;
+    private static final int PAGE_SLOT = 39;
+    private static final int NEXT_SLOT = 42;
+    private static final int LEGEND_SLOT = 37;
+    private static final int CLAIM_SLOT = 41;
+    private static final int STATS_SLOT = 43;
 
     /** Rows 1-3, columns 1-6. */
     private static final int[] DAY_SLOTS = {
-            10, 11, 12, 13, 14, 15,
-            19, 20, 21, 22, 23, 24,
-            28, 29, 30, 31, 32, 33,
+            10, 11, 12, 13, 14, 15, 16,
+            19, 20, 21, 22, 23, 24, 25,
+            28, 29, 30, 31, 32, 33, 34,
     };
     private static final int PER_PAGE = DAY_SLOTS.length;
 
@@ -235,7 +240,7 @@ public final class DailyRewardsGui implements Listener {
 
     private ItemStack dayIcon(int day, Reward reward) {
         if (day == TOTAL_DAYS) return new ItemStack(Material.PURPLE_DYE);
-        if (MILESTONE_DAYS.contains(day)) return new ItemStack(Material.LIGHT_BLUE_DYE);
+        if (MILESTONE_DAYS.contains(day)) return new ItemStack(Material.PURPLE_DYE);
         return derivedIcon(reward);
     }
 
@@ -276,7 +281,7 @@ public final class DailyRewardsGui implements Listener {
                 ChatColor.GREEN + "Lime" + ChatColor.GRAY + " = claimed",
                 ChatColor.YELLOW + "Orange" + ChatColor.GRAY + " = ready, click it",
                 ChatColor.GRAY + "Grey" + ChatColor.GRAY + " = still locked",
-                ChatColor.LIGHT_PURPLE + "Purple/Blue" + ChatColor.GRAY + " = milestone");
+                ChatColor.LIGHT_PURPLE + "Purple" + ChatColor.GRAY + " = milestone");
     }
 
     private ItemStack statsItem(Player player) {

@@ -72,7 +72,7 @@ public final class ConfigUpdater {
      * same number and then bumping BOTH together is the only arrangement that
      * works - a live file at the previous number is what triggers the rebuild.
      */
-    public static final int CURRENT_VERSION = 46;
+    public static final int CURRENT_VERSION = 47;
 
     private static final DateTimeFormatter STAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -99,6 +99,65 @@ public final class ConfigUpdater {
             "daily-rewards.rewards",
             "playtime-rewards.rewards"
     );
+
+    /**
+     * Rewrites the reward ladders in the live file from the bundled template,
+     * whenever they differ.
+     *
+     * <p>Runs on every boot, not on a version bump. The ladders are game
+     * content, so a value in them is either correct or stale - there is no
+     * third case where an operator meant it - and the general carry loop cannot
+     * be trusted with them because it preserves any difference as an owner
+     * customisation. That is how {@code eco give %player% 500} for day 3
+     * survived every upgrade.
+     *
+     * <p>Returns true when the file was changed.
+     */
+    private static boolean enforceLadders(JavaPlugin plugin, File file, YamlConfiguration live) {
+        if (!file.exists()) return false;
+        YamlConfiguration bundled = loadBundled(plugin);
+        if (bundled == null) return false;
+
+        boolean changed = false;
+        List<String> fixed = new ArrayList<>();
+        for (String section : TEMPLATE_OWNED_SECTIONS) {
+            ConfigurationSection want = bundled.getConfigurationSection(section);
+            if (want == null) continue;
+            // Compare on the command lists, which is where every real change
+            // lives: tier ids, ordering and thresholds all follow from them.
+            java.util.Map<String, java.util.List<String>> wantCommands = commandsByTier(want);
+            java.util.Map<String, java.util.List<String>> haveCommands = commandsByTier(live);
+            if (wantCommands.isEmpty() || wantCommands.equals(haveCommands)) continue;
+            live.set(section, want);
+            fixed.add(section);
+            changed = true;
+        }
+        if (!changed) return false;
+
+        try {
+            live.save(file);
+            plugin.reloadConfig();
+            plugin.getLogger().warning("[Config] reward ladders reset to the bundled values ("
+                    + fixed + "). These are game content, not per-server tuning.");
+            return true;
+        } catch (IOException ex) {
+            plugin.getLogger().warning("[Config] could not reset the reward ladders: "
+                    + ex.getMessage());
+            return false;
+        }
+    }
+
+    /** tier id -> its command list, for the comparison above. */
+    private static java.util.Map<String, java.util.List<String>> commandsByTier(
+            ConfigurationSection rewards) {
+        java.util.Map<String, java.util.List<String>> out = new java.util.LinkedHashMap<>();
+        if (rewards == null) return out;
+        for (String id : rewards.getKeys(false)) {
+            ConfigurationSection tier = rewards.getConfigurationSection(id);
+            if (tier != null) out.put(id, tier.getStringList("commands"));
+        }
+        return out;
+    }
 
     /**
      * Settings that no longer exist and must not survive a rebuild.
@@ -162,6 +221,17 @@ public final class ConfigUpdater {
         // question that matters here.
         YamlConfiguration live = loadLive(plugin, file);
 
+        // The reward ladders are enforced BEFORE the version check, and
+        // unconditionally. Gating this on a version bump cannot work: the
+        // previous release already migrated the file to the current number, so
+        // the gate below returned early and the reset never ran - which is
+        // exactly how a stale day-1 value survived a release whose entire point
+        // was to replace it.
+        boolean laddersReset = enforceLadders(plugin, file, live);
+        if (laddersReset) {
+            live = loadLive(plugin, file);
+        }
+
         int have = live.getInt(VERSION_KEY, 0);
         if (have >= CURRENT_VERSION && !isDamaged(live, plugin)) return 0;
 
@@ -223,32 +293,6 @@ public final class ConfigUpdater {
         for (String key : template.getKeys(true)) {
             if (template.isConfigurationSection(key)) continue;
             if (!live.contains(key, true)) addedKeys++;
-        }
-
-        // Reward ladders are game content, not owner settings, so any value the
-        // carry loop preserved in them is dropped here in favour of the bundled
-        // table. Done after the carry loop, otherwise the carry would simply put
-        // the stale value straight back.
-        List<String> reset = new ArrayList<>();
-        for (String section : TEMPLATE_OWNED_SECTIONS) {
-            if (!live.contains(section, true)) continue;
-            ConfigurationSection stale = live.getConfigurationSection(section);
-            if (stale == null || stale.getKeys(false).isEmpty()) continue;
-            reset.add(section);
-        }
-        if (!reset.isEmpty()) {
-            // Rebuild these sections from scratch off the template.
-            for (String section : reset) {
-                template.set(section, null);
-            }
-            YamlConfiguration fresh = loadBundled(plugin);
-            if (fresh != null) {
-                for (String section : reset) {
-                    template.set(section, fresh.getConfigurationSection(section));
-                }
-            }
-            plugin.getLogger().warning("[Config] reset to the bundled ladder (these are "
-                    + "game content, your edited values were not kept): " + reset);
         }
 
         template.set(VERSION_KEY, CURRENT_VERSION);

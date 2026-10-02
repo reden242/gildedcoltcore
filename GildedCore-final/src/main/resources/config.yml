@@ -5,7 +5,7 @@
 # One caveat: deleting a key does not disable it permanently - the next merge
 # will restore it at its default, because a deletion is indistinguishable from
 # a key that was never there. Set it to false or empty instead of deleting it.
-config-version: 46
+config-version: 47
 
 local-ai:
   # Local-only supervised clean/advertising classifier. No external AI.
