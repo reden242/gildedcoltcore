@@ -1,0 +1,39 @@
+name: Build RD-Bot
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'RD-Bot/**'
+      - '.github/workflows/build-rdbot.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'RD-Bot/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build RD-Bot with Maven
+        run: |
+          cd RD-Bot
+          mvn clean package -DskipTests
+
+      - name: Upload RD-Bot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RD-Bot-jar
+          path: RD-Bot/target/RD-Bot.jar
+          retention-days: 30
